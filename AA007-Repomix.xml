@@ -1,0 +1,2614 @@
+<repomix><file_summary>This file is a merged representation of a subset of the codebase, containing files not matching ignore patterns, combined into a single document by Repomix.
+The content has been processed where content has been formatted for parsing in xml style.<purpose>This file contains a packed representation of a subset of the repository&apos;s contents that is considered the most important context.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.</purpose><file_format>The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Repository files, each consisting of:
+  - File path as an attribute
+  - Full contents of the file</file_format><usage_guidelines>- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.</usage_guidelines><notes>- Some files may have been excluded based on .gitignore rules and Repomix&apos;s configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching these patterns are excluded: backend/.venv/**, frontend/node_modules/**, frontend/dist/**, .git/**, **/__pycache__/**, **/.pytest_cache/**, *.log, AA007-Repomix.xml
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Content has been formatted for parsing in xml style
+- Files are sorted by Git change count (files with more changes are at the bottom)</notes></file_summary><directory_structure>backend/
+  app/
+    agents/
+      __init__.py
+      common.py
+      decision_agent.py
+      engagement_agent.py
+      fit_sla_agent.py
+      lead_intake_agent.py
+      recency_agent.py
+    core/
+      __init__.py
+    data/
+      seed_leads.py
+    models/
+      __init__.py
+      schemas.py
+    services/
+      __init__.py
+      context_builder.py
+      workflow_context.py
+      workflow_service.py
+    __init__.py
+    main.py
+  tests/
+    __init__.py
+    test_health.py
+  requirements.txt
+frontend/
+  public/
+    favicon.svg
+    icons.svg
+  src/
+    assets/
+      hero.png
+      react.svg
+      vite.svg
+    api.ts
+    App.css
+    App.tsx
+    index.css
+    main.tsx
+  .gitignore
+  .oxlintrc.json
+  index.html
+  package.json
+  README.md
+  tsconfig.app.json
+  tsconfig.json
+  tsconfig.node.json
+  vite.config.ts
+.gitignore</directory_structure><files>This section contains the contents of the repository&apos;s files.<file path="backend/app/agents/__init__.py"></file><file path="backend/app/agents/common.py">from app.models.schemas import AgentResult
+from app.services.workflow_context import WorkflowContext
+
+
+def record_result(
+    context: WorkflowContext,
+    result: AgentResult,
+) -&gt; AgentResult:
+    context.agent_results.append(result)
+    context.evidence.extend(result.evidence)
+    return result</file><file path="backend/app/agents/decision_agent.py">from app.models.schemas import AgentResult
+from app.services.workflow_context import WorkflowContext
+from app.agents.common import record_result
+
+
+class LeadPriorityDecisionAgent:
+
+    name = &quot;Lead Priority Decision Agent&quot;
+
+    REQUIRED_AGENTS = {
+        &quot;Lead Intake Agent&quot;,
+        &quot;Recency Agent&quot;,
+        &quot;Engagement Agent&quot;,
+        &quot;Fit &amp; SLA Agent&quot;,
+    }
+
+    def run(self, context: WorkflowContext) -&gt; AgentResult:
+
+        results = {
+            item.agent_name: item
+            for item in context.agent_results
+            if item.agent_name != self.name
+        }
+
+        completed = set(results)
+
+        if not self.REQUIRED_AGENTS.issubset(completed):
+            result = AgentResult(
+                agent_name=self.name,
+                status=&quot;INCOMPLETE&quot;,
+                summary=&quot;Required agent results are missing.&quot;,
+                evidence=[
+                    f&quot;Completed agents: {len(self.REQUIRED_AGENTS.intersection(completed))} of 4.&quot;
+                ],
+                details={
+                    &quot;recommendation&quot;: None,
+                    &quot;triggered_rules&quot;: [],
+                },
+            )
+            return record_result(context, result)
+
+        intake = results[&quot;Lead Intake Agent&quot;]
+        recency = results[&quot;Recency Agent&quot;]
+        engagement = results[&quot;Engagement Agent&quot;]
+        fit_sla = results[&quot;Fit &amp; SLA Agent&quot;]
+
+        recommendation = None
+        triggered_rules = []
+        reasons = []
+
+        # Rule 1: Missing mandatory lead information.
+        issues = intake.details.get(&quot;issues&quot;, [])
+
+        if intake.status != &quot;PASS&quot; or issues:
+            recommendation = &quot;REQUEST_DATA&quot;
+            triggered_rules.append(&quot;AA007-RULE-01&quot;)
+            reasons.extend(
+                issues or [&quot;Lead intake validation did not pass.&quot;]
+            )
+
+        # Rule 2: A committed follow-up is overdue.
+        elif fit_sla.details.get(&quot;overdue&quot;) is True:
+            recommendation = &quot;FOLLOW_UP_NOW&quot;
+            triggered_rules.append(&quot;AA007-RULE-02&quot;)
+            reasons.append(
+                &quot;A committed follow-up is overdue.&quot;
+            )
+
+        # Rule 3: High fit, recent contact and recorded engagement.
+        elif (
+            fit_sla.details.get(&quot;declared_fit&quot;) == &quot;HIGH&quot;
+            and recency.status == &quot;RECENT&quot;
+            and engagement.status in {&quot;HIGH&quot;, &quot;MODERATE&quot;}
+        ):
+            recommendation = &quot;FOLLOW_UP_NOW&quot;
+            triggered_rules.append(&quot;AA007-RULE-03&quot;)
+            reasons.extend([
+                &quot;Declared fit is HIGH.&quot;,
+                &quot;Lead contact is recent.&quot;,
+                &quot;Engagement activity is recorded.&quot;,
+            ])
+
+        # Rule 4: Stale contact and no engagement.
+        elif (
+            recency.status == &quot;STALE&quot;
+            and engagement.status == &quot;LOW&quot;
+        ):
+            recommendation = &quot;NURTURE&quot;
+            triggered_rules.append(&quot;AA007-RULE-04&quot;)
+            reasons.extend([
+                &quot;Lead contact is stale.&quot;,
+                &quot;No engagement events are recorded.&quot;,
+            ])
+
+        # Rule 5: Default deterministic outcome.
+        else:
+            recommendation = &quot;FOLLOW_UP_SOON&quot;
+            triggered_rules.append(&quot;AA007-RULE-05&quot;)
+            reasons.append(
+                &quot;No immediate-follow-up or nurture rule was triggered.&quot;
+            )
+
+        evidence = [
+            f&quot;Recommendation: {recommendation}&quot;,
+            *reasons,
+            f&quot;Rules triggered: {&apos;, &apos;.join(triggered_rules)}&quot;,
+        ]
+
+        result = AgentResult(
+            agent_name=self.name,
+            status=&quot;DECIDED&quot;,
+            summary=f&quot;Recommendation: {recommendation}&quot;,
+            evidence=evidence,
+            details={
+                &quot;recommendation&quot;: recommendation,
+                &quot;triggered_rules&quot;: triggered_rules,
+                &quot;reasons&quot;: reasons,
+                &quot;agents_considered&quot;: sorted(self.REQUIRED_AGENTS),
+            },
+        )
+
+        return record_result(context, result)</file><file path="backend/app/agents/engagement_agent.py">from app.models.schemas import AgentResult
+from app.services.workflow_context import WorkflowContext
+from app.agents.common import record_result
+
+
+class EngagementAgent:
+
+    name = &quot;Engagement Agent&quot;
+
+    def run(self, context: WorkflowContext) -&gt; AgentResult:
+        events = context.lead.engagement_events
+
+        event_types = [event.event_type.upper() for event in events]
+
+        if not events:
+            status = &quot;LOW&quot;
+            summary = &quot;No engagement events are recorded.&quot;
+        elif len(events) &gt;= 2:
+            status = &quot;HIGH&quot;
+            summary = &quot;Multiple engagement events are recorded.&quot;
+        else:
+            status = &quot;MODERATE&quot;
+            summary = &quot;One engagement event is recorded.&quot;
+
+        evidence = [
+            f&quot;Recorded engagement events: {len(events)}.&quot;
+        ]
+
+        evidence.extend(
+            f&quot;Engagement event: {event_type}&quot;
+            for event_type in event_types
+        )
+
+        result = AgentResult(
+            agent_name=self.name,
+            status=status,
+            summary=summary,
+            evidence=evidence,
+            details={
+                &quot;event_count&quot;: len(events),
+                &quot;event_types&quot;: event_types,
+            },
+        )
+
+        return record_result(context, result)</file><file path="backend/app/agents/fit_sla_agent.py">from datetime import datetime, timezone
+
+from app.models.schemas import AgentResult
+from app.services.workflow_context import WorkflowContext
+from app.agents.common import record_result
+
+
+class FitSlaAgent:
+
+    name = &quot;Fit &amp; SLA Agent&quot;
+
+    def run(self, context: WorkflowContext) -&gt; AgentResult:
+        lead = context.lead
+        fit = (lead.declared_fit or &quot;&quot;).upper()
+        follow_up = lead.pending_follow_up
+
+        evidence = [
+            f&quot;Declared fit: {fit or &apos;NOT PROVIDED&apos;}.&quot;,
+            f&quot;Follow-up committed: {follow_up.committed}.&quot;,
+        ]
+
+        if follow_up.due_at is None:
+            overdue = False
+            evidence.append(&quot;No follow-up due date is available.&quot;)
+        else:
+            due_at = follow_up.due_at
+
+            if due_at.tzinfo is None:
+                due_at = due_at.replace(tzinfo=timezone.utc)
+
+            overdue = (
+                follow_up.committed
+                and due_at &lt; datetime.now(timezone.utc)
+            )
+
+            evidence.append(
+                f&quot;Follow-up due date: {due_at.isoformat()}.&quot;
+            )
+
+        if overdue:
+            sla_status = &quot;OVERDUE&quot;
+        elif follow_up.committed:
+            sla_status = &quot;COMMITTED&quot;
+        else:
+            sla_status = &quot;NO_COMMITMENT&quot;
+
+        result = AgentResult(
+            agent_name=self.name,
+            status=&quot;PASS&quot;,
+            summary=&quot;Lead fit and follow-up commitment evaluated.&quot;,
+            evidence=evidence,
+            details={
+                &quot;declared_fit&quot;: fit or None,
+                &quot;sla_status&quot;: sla_status,
+                &quot;overdue&quot;: overdue,
+            },
+        )
+
+        return record_result(context, result)</file><file path="backend/app/agents/lead_intake_agent.py">from app.models.schemas import AgentResult
+from app.services.workflow_context import WorkflowContext
+from app.agents.common import record_result
+
+
+class LeadIntakeAgent:
+
+    name = &quot;Lead Intake Agent&quot;
+
+    def run(self, context: WorkflowContext) -&gt; AgentResult:
+        lead = context.lead
+        issues = []
+
+        if lead.contact is None:
+            issues.append(&quot;Contact details are missing.&quot;)
+        elif not lead.contact.name and not lead.contact.email and not lead.contact.phone:
+            issues.append(&quot;At least one contact identifier is required.&quot;)
+
+        if lead.stage is None:
+            issues.append(&quot;Lead stage is missing.&quot;)
+
+        if not lead.source:
+            issues.append(&quot;Lead source is missing.&quot;)
+
+        if issues:
+            result = AgentResult(
+                agent_name=self.name,
+                status=&quot;NEEDS_DATA&quot;,
+                summary=&quot;Required lead information is incomplete.&quot;,
+                evidence=issues,
+                details={&quot;issues&quot;: issues},
+            )
+        else:
+            evidence = [
+                f&quot;Lead ID: {lead.lead_id}&quot;,
+                f&quot;Lead stage: {lead.stage.value}&quot;,
+                f&quot;Lead source: {lead.source}&quot;,
+            ]
+            result = AgentResult(
+                agent_name=self.name,
+                status=&quot;PASS&quot;,
+                summary=&quot;Lead intake validation passed.&quot;,
+                evidence=evidence,
+                details={&quot;lead_id&quot;: lead.lead_id},
+            )
+
+        return record_result(context, result)</file><file path="backend/app/agents/recency_agent.py">from datetime import date
+
+from app.models.schemas import AgentResult
+from app.services.workflow_context import WorkflowContext
+from app.agents.common import record_result
+
+
+class RecencyAgent:
+
+    name = &quot;Recency Agent&quot;
+
+    def run(self, context: WorkflowContext) -&gt; AgentResult:
+        lead = context.lead
+        today = date.today()
+
+        evidence = [f&quot;Lead age: {lead.age_days} days.&quot;]
+
+        if lead.last_contact_date is None:
+            evidence.append(&quot;Last contact date is unavailable.&quot;)
+            status = &quot;MISSING_DATA&quot;
+            summary = &quot;Cannot evaluate last-contact recency.&quot;
+            recency_days = None
+        else:
+            recency_days = (today - lead.last_contact_date).days
+            evidence.append(f&quot;Days since last contact: {recency_days}.&quot;)
+
+            if recency_days &lt; 0:
+                status = &quot;INVALID_DATA&quot;
+                summary = &quot;Last contact date is in the future.&quot;
+            elif recency_days &lt;= 3:
+                status = &quot;RECENT&quot;
+                summary = &quot;Lead was contacted recently.&quot;
+            elif recency_days &lt;= 14:
+                status = &quot;MODERATE&quot;
+                summary = &quot;Lead contact is moderately recent.&quot;
+            else:
+                status = &quot;STALE&quot;
+                summary = &quot;Lead has not been contacted recently.&quot;
+
+        result = AgentResult(
+            agent_name=self.name,
+            status=status,
+            summary=summary,
+            evidence=evidence,
+            details={
+                &quot;lead_age_days&quot;: lead.age_days,
+                &quot;days_since_last_contact&quot;: recency_days,
+            },
+        )
+        return record_result(context, result)</file><file path="backend/app/core/__init__.py"></file><file path="backend/app/data/seed_leads.py">from datetime import date, datetime, timedelta, timezone
+
+from app.models.schemas import (
+    ContactDetails,
+    EngagementEvent,
+    LeadRecord,
+    LeadStage,
+    PendingFollowUp,
+)
+
+today = date.today()
+now = datetime.now(timezone.utc)
+
+
+SAMPLE_LEADS: list[LeadRecord] = [
+    LeadRecord(
+        lead_id=&quot;AA007-HOT-001&quot;,
+        contact=ContactDetails(
+            name=&quot;Aarav Thomas&quot;,
+            email=&quot;aarav@example.com&quot;,
+            phone=&quot;+91-9000000001&quot;,
+        ),
+        source=&quot;Website&quot;,
+        age_days=1,
+        last_contact_date=today,
+        engagement_events=[
+            EngagementEvent(
+                event_type=&quot;INQUIRY&quot;,
+                occurred_at=today,
+                description=&quot;Submitted a recent product inquiry&quot;,
+            ),
+            EngagementEvent(
+                event_type=&quot;CALL_REQUEST&quot;,
+                occurred_at=today,
+                description=&quot;Requested a sales call&quot;,
+            ),
+        ],
+        declared_need=&quot;Needs a product demonstration&quot;,
+        declared_fit=&quot;HIGH&quot;,
+        stage=LeadStage.NEW,
+        pending_follow_up=PendingFollowUp(
+            committed=True,
+            due_at=now - timedelta(hours=2),
+            description=&quot;Committed callback is overdue&quot;,
+        ),
+    ),
+    LeadRecord(
+        lead_id=&quot;AA007-WARM-001&quot;,
+        contact=ContactDetails(
+            name=&quot;Meera Joseph&quot;,
+            email=&quot;meera@example.com&quot;,
+        ),
+        source=&quot;Referral&quot;,
+        age_days=5,
+        last_contact_date=today - timedelta(days=2),
+        engagement_events=[
+            EngagementEvent(
+                event_type=&quot;EMAIL_REPLY&quot;,
+                occurred_at=today - timedelta(days=2),
+                description=&quot;Replied to a sales email&quot;,
+            ),
+        ],
+        declared_need=&quot;Evaluating available options&quot;,
+        declared_fit=&quot;MEDIUM&quot;,
+        stage=LeadStage.CONTACTED,
+        pending_follow_up=PendingFollowUp(
+            committed=False,
+            description=&quot;No committed follow-up deadline&quot;,
+        ),
+    ),
+    LeadRecord(
+        lead_id=&quot;AA007-STALE-001&quot;,
+        contact=ContactDetails(
+            name=&quot;Rohan Mathew&quot;,
+            email=&quot;rohan@example.com&quot;,
+        ),
+        source=&quot;Event&quot;,
+        age_days=45,
+        last_contact_date=today - timedelta(days=40),
+        engagement_events=[],
+        declared_need=&quot;No recent need update&quot;,
+        declared_fit=&quot;LOW&quot;,
+        stage=LeadStage.NEW,
+        pending_follow_up=PendingFollowUp(
+            committed=False,
+            description=&quot;No pending committed follow-up&quot;,
+        ),
+    ),
+]
+
+
+def get_seed_leads() -&gt; list[LeadRecord]:
+    &quot;&quot;&quot;Return fresh model instances for the demo dataset.&quot;&quot;&quot;
+    return [lead.model_copy(deep=True) for lead in SAMPLE_LEADS]
+
+
+def get_seed_lead(lead_id: str) -&gt; LeadRecord | None:
+    &quot;&quot;&quot;Find one demo lead by its ID.&quot;&quot;&quot;
+    for lead in get_seed_leads():
+        if lead.lead_id == lead_id:
+            return lead
+    return None</file><file path="backend/app/models/__init__.py"></file><file path="backend/app/models/schemas.py">from datetime import date, datetime
+from enum import Enum
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class LeadStage(str, Enum):
+    NEW = &quot;NEW&quot;
+    CONTACTED = &quot;CONTACTED&quot;
+    QUALIFIED = &quot;QUALIFIED&quot;
+    PROPOSAL = &quot;PROPOSAL&quot;
+    NEGOTIATION = &quot;NEGOTIATION&quot;
+    WON = &quot;WON&quot;
+    LOST = &quot;LOST&quot;
+
+
+class ContactDetails(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+
+
+class EngagementEvent(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    event_type: str = Field(min_length=1)
+    occurred_at: date
+    description: str | None = None
+
+
+class PendingFollowUp(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    committed: bool = False
+    due_at: datetime | None = None
+    description: str | None = None
+
+
+class LeadRecord(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    lead_id: str = Field(min_length=1)
+    contact: ContactDetails | None = None
+    source: str | None = None
+    age_days: int = Field(ge=0)
+    last_contact_date: date | None = None
+    engagement_events: list[EngagementEvent] = Field(default_factory=list)
+    declared_need: str | None = None
+    declared_fit: str | None = None
+    stage: LeadStage | None = None
+    pending_follow_up: PendingFollowUp = Field(default_factory=PendingFollowUp)
+
+
+class WorkflowRequest(BaseModel):
+    lead: LeadRecord
+
+
+class AgentResult(BaseModel):
+    agent_name: str
+    status: str
+    summary: str
+    evidence: list[str] = Field(default_factory=list)
+    score: float | None = None
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
+class WorkflowResponse(BaseModel):
+    workflow_id: str
+    lead_id: str
+    recommendation: str
+    priority_score: float | None = None
+    reasons: list[str] = Field(default_factory=list)
+    triggered_rules: list[str] = Field(default_factory=list)
+    agent_outputs: list[AgentResult] = Field(default_factory=list)
+    evidence: list[str] = Field(default_factory=list)
+    audit_reference: str
+    errors: list[str] = Field(default_factory=list)</file><file path="backend/app/services/__init__.py"></file><file path="backend/app/services/context_builder.py">from app.models.schemas import LeadRecord
+from app.services.workflow_context import WorkflowContext, build_workflow_context
+
+
+class ContextBuilder:
+    &quot;&quot;&quot;Prepare validated lead data for the agent workflow.&quot;&quot;&quot;
+
+    @staticmethod
+    def build(lead: LeadRecord) -&gt; WorkflowContext:
+        return build_workflow_context(lead)</file><file path="backend/app/services/workflow_context.py">from datetime import datetime, timezone
+from uuid import uuid4
+
+from pydantic import BaseModel, Field
+
+from app.models.schemas import AgentResult, LeadRecord
+
+
+class WorkflowContext(BaseModel):
+    workflow_id: str
+    created_at: datetime
+    lead: LeadRecord
+    agent_results: list[AgentResult] = Field(default_factory=list)
+    evidence: list[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+    metadata: dict[str, str] = Field(default_factory=dict)
+
+
+def build_workflow_context(lead: LeadRecord) -&gt; WorkflowContext:
+    &quot;&quot;&quot;
+    Create an isolated shared context for one lead-analysis run.
+
+    Each run receives a unique ID and its own copy of the lead.
+    &quot;&quot;&quot;
+    return WorkflowContext(
+        workflow_id=f&quot;AA007-{uuid4().hex[:12].upper()}&quot;,
+        created_at=datetime.now(timezone.utc),
+        lead=lead.model_copy(deep=True),
+        metadata={
+            &quot;case_id&quot;: &quot;AA007&quot;,
+            &quot;case_name&quot;: &quot;Lead Follow-up Prioritization Intelligence&quot;,
+            &quot;workflow_status&quot;: &quot;INITIALIZED&quot;,
+        },
+    )
+
+
+def add_agent_result(
+    context: WorkflowContext,
+    result: AgentResult,
+) -&gt; None:
+    &quot;&quot;&quot;Add one agent&apos;s structured result to the shared context.&quot;&quot;&quot;
+    context.agent_results.append(result)
+    context.evidence.extend(result.evidence)
+
+
+def add_workflow_error(
+    context: WorkflowContext,
+    message: str,
+) -&gt; None:
+    &quot;&quot;&quot;Record an error without losing the workflow context.&quot;&quot;&quot;
+    context.errors.append(message)</file><file path="backend/app/services/workflow_service.py">from app.agents.lead_intake_agent import LeadIntakeAgent
+from app.agents.recency_agent import RecencyAgent
+from app.agents.engagement_agent import EngagementAgent
+from app.agents.fit_sla_agent import FitSlaAgent
+from app.agents.decision_agent import LeadPriorityDecisionAgent
+
+from app.models.schemas import WorkflowRequest, WorkflowResponse
+from app.services.context_builder import ContextBuilder
+
+
+class LeadWorkflowService:
+    &quot;&quot;&quot;Execute the complete AA007 lead-prioritization workflow.&quot;&quot;&quot;
+
+    def __init__(self):
+        self.agents = [
+            LeadIntakeAgent(),
+            RecencyAgent(),
+            EngagementAgent(),
+            FitSlaAgent(),
+            LeadPriorityDecisionAgent(),
+        ]
+
+    def run(self, request: WorkflowRequest) -&gt; WorkflowResponse:
+        context = ContextBuilder.build(request.lead)
+
+        for agent in self.agents:
+            agent.run(context)
+
+        decision = context.agent_results[-1]
+        details = decision.details
+
+        recommendation = details.get(&quot;recommendation&quot;) or &quot;REQUEST_DATA&quot;
+
+        return WorkflowResponse(
+            workflow_id=context.workflow_id,
+            lead_id=context.lead.lead_id,
+            recommendation=recommendation,
+            priority_score=decision.score,
+            reasons=details.get(&quot;reasons&quot;, []),
+            triggered_rules=details.get(&quot;triggered_rules&quot;, []),
+            agent_outputs=context.agent_results,
+            evidence=context.evidence,
+            audit_reference=f&quot;AUDIT-{context.workflow_id}&quot;,
+            errors=context.errors,
+        )</file><file path="backend/app/__init__.py"></file><file path="backend/tests/__init__.py"></file><file path="backend/requirements.txt">annotated-doc==0.0.5
+annotated-types==0.8.0
+anyio==4.16.0
+certifi==2026.10.23
+click==8.5.1
+colorama==0.4.6
+fastapi==0.162.3
+h11==0.16.0
+httpcore==1.0.9
+httptools==0.9.0
+httpx==0.28.1
+idna==3.20
+iniconfig==2.3.1
+opentelemetry-api==1.45.2
+packaging==26.3
+pluggy==1.7.0
+pydantic==2.14.3
+pydantic_core==2.50.4
+Pygments==2.21.0
+pytest==9.2.0
+python-dotenv==1.2.4
+PyYAML==6.0.3
+starlette==1.10.0
+typing-inspection==0.4.5
+typing_extensions==4.16.0
+uvicorn==0.54.0
+watchfiles==1.3.0
+websockets==17.4</file><file path="frontend/public/favicon.svg">&lt;svg xmlns=&quot;http://www.w3.org/2000/svg&quot; width=&quot;48&quot; height=&quot;46&quot; fill=&quot;none&quot; viewBox=&quot;0 0 48 46&quot;&gt;&lt;path fill=&quot;#863bff&quot; d=&quot;M25.946 44.938c-.664.845-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.287c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.497 0-3.578-1.842-3.578H1.237c-.92 0-1.456-1.04-.92-1.788L10.013.474c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.579 1.842 3.579h11.377c.943 0 1.473 1.088.89 1.83L25.947 44.94z&quot; style=&quot;fill:#863bff;fill:color(display-p3 .5252 .23 1);fill-opacity:1&quot;/&gt;&lt;mask id=&quot;a&quot; width=&quot;48&quot; height=&quot;46&quot; x=&quot;0&quot; y=&quot;0&quot; maskUnits=&quot;userSpaceOnUse&quot; style=&quot;mask-type:alpha&quot;&gt;&lt;path fill=&quot;#000&quot; d=&quot;M25.842 44.938c-.664.844-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.183c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.498 0-3.579-1.842-3.579H1.133c-.92 0-1.456-1.04-.92-1.787L9.91.473c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.578 1.842 3.578h11.377c.943 0 1.473 1.088.89 1.832L25.843 44.94z&quot; style=&quot;fill:#000;fill-opacity:1&quot;/&gt;&lt;/mask&gt;&lt;g mask=&quot;url(#a)&quot;&gt;&lt;g filter=&quot;url(#b)&quot;&gt;&lt;ellipse cx=&quot;5.508&quot; cy=&quot;14.704&quot; fill=&quot;#ede6ff&quot; rx=&quot;5.508&quot; ry=&quot;14.704&quot; style=&quot;fill:#ede6ff;fill:color(display-p3 .9275 .9033 1);fill-opacity:1&quot; transform=&quot;matrix(.00324 1 1 -.00324 -4.47 31.516)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#c)&quot;&gt;&lt;ellipse cx=&quot;10.399&quot; cy=&quot;29.851&quot; fill=&quot;#ede6ff&quot; rx=&quot;10.399&quot; ry=&quot;29.851&quot; style=&quot;fill:#ede6ff;fill:color(display-p3 .9275 .9033 1);fill-opacity:1&quot; transform=&quot;matrix(.00324 1 1 -.00324 -39.328 7.883)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#d)&quot;&gt;&lt;ellipse cx=&quot;5.508&quot; cy=&quot;30.487&quot; fill=&quot;#7e14ff&quot; rx=&quot;5.508&quot; ry=&quot;30.487&quot; style=&quot;fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1&quot; transform=&quot;rotate(89.814 -25.913 -14.639)scale(1 -1)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#e)&quot;&gt;&lt;ellipse cx=&quot;5.508&quot; cy=&quot;30.599&quot; fill=&quot;#7e14ff&quot; rx=&quot;5.508&quot; ry=&quot;30.599&quot; style=&quot;fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1&quot; transform=&quot;rotate(89.814 -32.644 -3.334)scale(1 -1)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#f)&quot;&gt;&lt;ellipse cx=&quot;5.508&quot; cy=&quot;30.599&quot; fill=&quot;#7e14ff&quot; rx=&quot;5.508&quot; ry=&quot;30.599&quot; style=&quot;fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1&quot; transform=&quot;matrix(.00324 1 1 -.00324 -34.34 30.47)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#g)&quot;&gt;&lt;ellipse cx=&quot;14.072&quot; cy=&quot;22.078&quot; fill=&quot;#ede6ff&quot; rx=&quot;14.072&quot; ry=&quot;22.078&quot; style=&quot;fill:#ede6ff;fill:color(display-p3 .9275 .9033 1);fill-opacity:1&quot; transform=&quot;rotate(93.35 24.506 48.493)scale(-1 1)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#h)&quot;&gt;&lt;ellipse cx=&quot;3.47&quot; cy=&quot;21.501&quot; fill=&quot;#7e14ff&quot; rx=&quot;3.47&quot; ry=&quot;21.501&quot; style=&quot;fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1&quot; transform=&quot;rotate(89.009 28.708 47.59)scale(-1 1)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#i)&quot;&gt;&lt;ellipse cx=&quot;3.47&quot; cy=&quot;21.501&quot; fill=&quot;#7e14ff&quot; rx=&quot;3.47&quot; ry=&quot;21.501&quot; style=&quot;fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1&quot; transform=&quot;rotate(89.009 28.708 47.59)scale(-1 1)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#j)&quot;&gt;&lt;ellipse cx=&quot;.387&quot; cy=&quot;8.972&quot; fill=&quot;#7e14ff&quot; rx=&quot;4.407&quot; ry=&quot;29.108&quot; style=&quot;fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1&quot; transform=&quot;rotate(39.51 .387 8.972)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#k)&quot;&gt;&lt;ellipse cx=&quot;47.523&quot; cy=&quot;-6.092&quot; fill=&quot;#7e14ff&quot; rx=&quot;4.407&quot; ry=&quot;29.108&quot; style=&quot;fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1&quot; transform=&quot;rotate(37.892 47.523 -6.092)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#l)&quot;&gt;&lt;ellipse cx=&quot;41.412&quot; cy=&quot;6.333&quot; fill=&quot;#47bfff&quot; rx=&quot;5.971&quot; ry=&quot;9.665&quot; style=&quot;fill:#47bfff;fill:color(display-p3 .2799 .748 1);fill-opacity:1&quot; transform=&quot;rotate(37.892 41.412 6.333)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#m)&quot;&gt;&lt;ellipse cx=&quot;-1.879&quot; cy=&quot;38.332&quot; fill=&quot;#7e14ff&quot; rx=&quot;4.407&quot; ry=&quot;29.108&quot; style=&quot;fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1&quot; transform=&quot;rotate(37.892 -1.88 38.332)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#n)&quot;&gt;&lt;ellipse cx=&quot;-1.879&quot; cy=&quot;38.332&quot; fill=&quot;#7e14ff&quot; rx=&quot;4.407&quot; ry=&quot;29.108&quot; style=&quot;fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1&quot; transform=&quot;rotate(37.892 -1.88 38.332)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#o)&quot;&gt;&lt;ellipse cx=&quot;35.651&quot; cy=&quot;29.907&quot; fill=&quot;#7e14ff&quot; rx=&quot;4.407&quot; ry=&quot;29.108&quot; style=&quot;fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1&quot; transform=&quot;rotate(37.892 35.651 29.907)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#p)&quot;&gt;&lt;ellipse cx=&quot;38.418&quot; cy=&quot;32.4&quot; fill=&quot;#47bfff&quot; rx=&quot;5.971&quot; ry=&quot;15.297&quot; style=&quot;fill:#47bfff;fill:color(display-p3 .2799 .748 1);fill-opacity:1&quot; transform=&quot;rotate(37.892 38.418 32.4)&quot;/&gt;&lt;/g&gt;&lt;/g&gt;&lt;defs&gt;&lt;filter id=&quot;b&quot; width=&quot;60.045&quot; height=&quot;41.654&quot; x=&quot;-19.77&quot; y=&quot;16.149&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17158&quot; stdDeviation=&quot;7.659&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;c&quot; width=&quot;90.34&quot; height=&quot;51.437&quot; x=&quot;-54.613&quot; y=&quot;-7.533&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17158&quot; stdDeviation=&quot;7.659&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;d&quot; width=&quot;79.355&quot; height=&quot;29.4&quot; x=&quot;-49.64&quot; y=&quot;2.03&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17158&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;e&quot; width=&quot;79.579&quot; height=&quot;29.4&quot; x=&quot;-45.045&quot; y=&quot;20.029&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17158&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;f&quot; width=&quot;79.579&quot; height=&quot;29.4&quot; x=&quot;-43.513&quot; y=&quot;21.178&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17158&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;g&quot; width=&quot;74.749&quot; height=&quot;58.852&quot; x=&quot;15.756&quot; y=&quot;-17.901&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17158&quot; stdDeviation=&quot;7.659&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;h&quot; width=&quot;61.377&quot; height=&quot;25.362&quot; x=&quot;23.548&quot; y=&quot;2.284&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17158&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;i&quot; width=&quot;61.377&quot; height=&quot;25.362&quot; x=&quot;23.548&quot; y=&quot;2.284&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17158&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;j&quot; width=&quot;56.045&quot; height=&quot;63.649&quot; x=&quot;-27.636&quot; y=&quot;-22.853&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17158&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;k&quot; width=&quot;54.814&quot; height=&quot;64.646&quot; x=&quot;20.116&quot; y=&quot;-38.415&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17158&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;l&quot; width=&quot;33.541&quot; height=&quot;35.313&quot; x=&quot;24.641&quot; y=&quot;-11.323&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17158&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;m&quot; width=&quot;54.814&quot; height=&quot;64.646&quot; x=&quot;-29.286&quot; y=&quot;6.009&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17158&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;n&quot; width=&quot;54.814&quot; height=&quot;64.646&quot; x=&quot;-29.286&quot; y=&quot;6.009&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17158&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;o&quot; width=&quot;54.814&quot; height=&quot;64.646&quot; x=&quot;8.244&quot; y=&quot;-2.416&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17158&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;p&quot; width=&quot;39.409&quot; height=&quot;43.623&quot; x=&quot;18.713&quot; y=&quot;10.588&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17158&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;/defs&gt;&lt;/svg&gt;</file><file path="frontend/public/icons.svg">&lt;svg xmlns=&quot;http://www.w3.org/2000/svg&quot;&gt;
+  &lt;symbol id=&quot;bluesky-icon&quot; viewBox=&quot;0 0 16 17&quot;&gt;
+    &lt;g clip-path=&quot;url(#bluesky-clip)&quot;&gt;&lt;path fill=&quot;#08060d&quot; d=&quot;M7.75 7.735c-.693-1.348-2.58-3.86-4.334-5.097-1.68-1.187-2.32-.981-2.74-.79C.188 2.065.1 2.812.1 3.251s.241 3.602.398 4.13c.52 1.744 2.367 2.333 4.07 2.145-2.495.37-4.71 1.278-1.805 4.512 3.196 3.309 4.38-.71 4.987-2.746.608 2.036 1.307 5.91 4.93 2.746 2.72-2.746.747-4.143-1.747-4.512 1.702.189 3.55-.4 4.07-2.145.156-.528.397-3.691.397-4.13s-.088-1.186-.575-1.406c-.42-.19-1.06-.395-2.741.79-1.755 1.24-3.64 3.752-4.334 5.099&quot;/&gt;&lt;/g&gt;
+    &lt;defs&gt;&lt;clipPath id=&quot;bluesky-clip&quot;&gt;&lt;path fill=&quot;#fff&quot; d=&quot;M.1.85h15.3v15.3H.1z&quot;/&gt;&lt;/clipPath&gt;&lt;/defs&gt;
+  &lt;/symbol&gt;
+  &lt;symbol id=&quot;discord-icon&quot; viewBox=&quot;0 0 20 19&quot;&gt;
+    &lt;path fill=&quot;#08060d&quot; d=&quot;M16.224 3.768a14.5 14.5 0 0 0-3.67-1.153c-.158.286-.343.67-.47.976a13.5 13.5 0 0 0-4.067 0c-.128-.306-.317-.69-.476-.976A14.4 14.4 0 0 0 3.868 3.77C1.546 7.28.916 10.703 1.231 14.077a14.7 14.7 0 0 0 4.5 2.306q.545-.748.965-1.587a9.5 9.5 0 0 1-1.518-.74q.191-.14.372-.293c2.927 1.369 6.107 1.369 8.999 0q.183.152.372.294-.723.437-1.52.74.418.838.963 1.588a14.6 14.6 0 0 0 4.504-2.308c.37-3.911-.63-7.302-2.644-10.309m-9.13 8.234c-.878 0-1.599-.82-1.599-1.82 0-.998.705-1.82 1.6-1.82.894 0 1.614.82 1.599 1.82.001 1-.705 1.82-1.6 1.82m5.91 0c-.878 0-1.599-.82-1.599-1.82 0-.998.705-1.82 1.6-1.82.893 0 1.614.82 1.599 1.82 0 1-.706 1.82-1.6 1.82&quot;/&gt;
+  &lt;/symbol&gt;
+  &lt;symbol id=&quot;documentation-icon&quot; viewBox=&quot;0 0 21 20&quot;&gt;
+    &lt;path fill=&quot;none&quot; stroke=&quot;#aa3bff&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot; stroke-width=&quot;1.35&quot; d=&quot;m15.5 13.333 1.533 1.322c.645.555.967.833.967 1.178s-.322.623-.967 1.179L15.5 18.333m-3.333-5-1.534 1.322c-.644.555-.966.833-.966 1.178s.322.623.966 1.179l1.534 1.321&quot;/&gt;
+    &lt;path fill=&quot;none&quot; stroke=&quot;#aa3bff&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot; stroke-width=&quot;1.35&quot; d=&quot;M17.167 10.836v-4.32c0-1.41 0-2.117-.224-2.68-.359-.906-1.118-1.621-2.08-1.96-.599-.21-1.349-.21-2.848-.21-2.623 0-3.935 0-4.983.369-1.684.591-3.013 1.842-3.641 3.428C3 6.449 3 7.684 3 10.154v2.122c0 2.558 0 3.838.706 4.726q.306.383.713.671c.76.536 1.79.64 3.581.66&quot;/&gt;
+    &lt;path fill=&quot;none&quot; stroke=&quot;#aa3bff&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot; stroke-width=&quot;1.35&quot; d=&quot;M3 10a2.78 2.78 0 0 1 2.778-2.778c.555 0 1.209.097 1.748-.047.48-.129.854-.503.982-.982.145-.54.048-1.194.048-1.749a2.78 2.78 0 0 1 2.777-2.777&quot;/&gt;
+  &lt;/symbol&gt;
+  &lt;symbol id=&quot;github-icon&quot; viewBox=&quot;0 0 19 19&quot;&gt;
+    &lt;path fill=&quot;#08060d&quot; fill-rule=&quot;evenodd&quot; d=&quot;M9.356 1.85C5.05 1.85 1.57 5.356 1.57 9.694a7.84 7.84 0 0 0 5.324 7.44c.387.079.528-.168.528-.376 0-.182-.013-.805-.013-1.454-2.165.467-2.616-.935-2.616-.935-.349-.91-.864-1.143-.864-1.143-.71-.48.051-.48.051-.48.787.051 1.2.805 1.2.805.695 1.194 1.817.857 2.268.649.064-.507.27-.857.49-1.052-1.728-.182-3.545-.857-3.545-3.87 0-.857.31-1.558.8-2.104-.078-.195-.349-1 .077-2.078 0 0 .657-.208 2.14.805a7.5 7.5 0 0 1 1.946-.26c.657 0 1.328.092 1.946.26 1.483-1.013 2.14-.805 2.14-.805.426 1.078.155 1.883.078 2.078.502.546.799 1.247.799 2.104 0 3.013-1.818 3.675-3.558 3.87.284.247.528.714.528 1.454 0 1.052-.012 1.896-.012 2.156 0 .208.142.455.528.377a7.84 7.84 0 0 0 5.324-7.441c.013-4.338-3.48-7.844-7.773-7.844&quot; clip-rule=&quot;evenodd&quot;/&gt;
+  &lt;/symbol&gt;
+  &lt;symbol id=&quot;social-icon&quot; viewBox=&quot;0 0 20 20&quot;&gt;
+    &lt;path fill=&quot;none&quot; stroke=&quot;#aa3bff&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot; stroke-width=&quot;1.35&quot; d=&quot;M12.5 6.667a4.167 4.167 0 1 0-8.334 0 4.167 4.167 0 0 0 8.334 0&quot;/&gt;
+    &lt;path fill=&quot;none&quot; stroke=&quot;#aa3bff&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot; stroke-width=&quot;1.35&quot; d=&quot;M2.5 16.667a5.833 5.833 0 0 1 8.75-5.053m3.837.474.513 1.035c.07.144.257.282.414.309l.93.155c.596.1.736.536.307.965l-.723.73a.64.64 0 0 0-.152.531l.207.903c.164.715-.213.991-.84.618l-.872-.52a.63.63 0 0 0-.577 0l-.872.52c-.624.373-1.003.094-.84-.618l.207-.903a.64.64 0 0 0-.152-.532l-.723-.729c-.426-.43-.289-.864.306-.964l.93-.156a.64.64 0 0 0 .412-.31l.513-1.034c.28-.562.735-.562 1.012 0&quot;/&gt;
+  &lt;/symbol&gt;
+  &lt;symbol id=&quot;x-icon&quot; viewBox=&quot;0 0 19 19&quot;&gt;
+    &lt;path fill=&quot;#08060d&quot; fill-rule=&quot;evenodd&quot; d=&quot;M1.893 1.98c.052.072 1.245 1.769 2.653 3.77l2.892 4.114c.183.261.333.48.333.486s-.068.089-.152.183l-.522.593-.765.867-3.597 4.087c-.375.426-.734.834-.798.905a1 1 0 0 0-.118.148c0 .01.236.017.664.017h.663l.729-.83c.4-.457.796-.906.879-.999a692 692 0 0 0 1.794-2.038c.034-.037.301-.34.594-.675l.551-.624.345-.392a7 7 0 0 1 .34-.374c.006 0 .93 1.306 2.052 2.903l2.084 2.965.045.063h2.275c1.87 0 2.273-.003 2.266-.021-.008-.02-1.098-1.572-3.894-5.547-2.013-2.862-2.28-3.246-2.273-3.266.008-.019.282-.332 2.085-2.38l2-2.274 1.567-1.782c.022-.028-.016-.03-.65-.03h-.674l-.3.342a871 871 0 0 1-1.782 2.025c-.067.075-.405.458-.75.852a100 100 0 0 1-.803.91c-.148.172-.299.344-.99 1.127-.304.343-.32.358-.345.327-.015-.019-.904-1.282-1.976-2.808L6.365 1.85H1.8zm1.782.91 8.078 11.294c.772 1.08 1.413 1.973 1.425 1.984.016.017.241.02 1.05.017l1.03-.004-2.694-3.766L7.796 5.75 5.722 2.852l-1.039-.004-1.039-.004z&quot; clip-rule=&quot;evenodd&quot;/&gt;
+  &lt;/symbol&gt;
+&lt;/svg&gt;</file><file path="frontend/src/assets/react.svg">&lt;svg xmlns=&quot;http://www.w3.org/2000/svg&quot; xmlns:xlink=&quot;http://www.w3.org/1999/xlink&quot; aria-hidden=&quot;true&quot; role=&quot;img&quot; class=&quot;iconify iconify--logos&quot; width=&quot;35.93&quot; height=&quot;32&quot; preserveAspectRatio=&quot;xMidYMid meet&quot; viewBox=&quot;0 0 256 228&quot;&gt;&lt;path fill=&quot;#00D8FF&quot; d=&quot;M210.483 73.824a171.49 171.49 0 0 0-8.24-2.597c.465-1.9.893-3.777 1.273-5.621c6.238-30.281 2.16-54.676-11.769-62.708c-13.355-7.7-35.196.329-57.254 19.526a171.23 171.23 0 0 0-6.375 5.848a155.866 155.866 0 0 0-4.241-3.917C100.759 3.829 77.587-4.822 63.673 3.233C50.33 10.957 46.379 33.89 51.995 62.588a170.974 170.974 0 0 0 1.892 8.48c-3.28.932-6.445 1.924-9.474 2.98C17.309 83.498 0 98.307 0 113.668c0 15.865 18.582 31.778 46.812 41.427a145.52 145.52 0 0 0 6.921 2.165a167.467 167.467 0 0 0-2.01 9.138c-5.354 28.2-1.173 50.591 12.134 58.266c13.744 7.926 36.812-.22 59.273-19.855a145.567 145.567 0 0 0 5.342-4.923a168.064 168.064 0 0 0 6.92 6.314c21.758 18.722 43.246 26.282 56.54 18.586c13.731-7.949 18.194-32.003 12.4-61.268a145.016 145.016 0 0 0-1.535-6.842c1.62-.48 3.21-.974 4.76-1.488c29.348-9.723 48.443-25.443 48.443-41.52c0-15.417-17.868-30.326-45.517-39.844Zm-6.365 70.984c-1.4.463-2.836.91-4.3 1.345c-3.24-10.257-7.612-21.163-12.963-32.432c5.106-11 9.31-21.767 12.459-31.957c2.619.758 5.16 1.557 7.61 2.4c23.69 8.156 38.14 20.213 38.14 29.504c0 9.896-15.606 22.743-40.946 31.14Zm-10.514 20.834c2.562 12.94 2.927 24.64 1.23 33.787c-1.524 8.219-4.59 13.698-8.382 15.893c-8.067 4.67-25.32-1.4-43.927-17.412a156.726 156.726 0 0 1-6.437-5.87c7.214-7.889 14.423-17.06 21.459-27.246c12.376-1.098 24.068-2.894 34.671-5.345a134.17 134.17 0 0 1 1.386 6.193ZM87.276 214.515c-7.882 2.783-14.16 2.863-17.955.675c-8.075-4.657-11.432-22.636-6.853-46.752a156.923 156.923 0 0 1 1.869-8.499c10.486 2.32 22.093 3.988 34.498 4.994c7.084 9.967 14.501 19.128 21.976 27.15a134.668 134.668 0 0 1-4.877 4.492c-9.933 8.682-19.886 14.842-28.658 17.94ZM50.35 144.747c-12.483-4.267-22.792-9.812-29.858-15.863c-6.35-5.437-9.555-10.836-9.555-15.216c0-9.322 13.897-21.212 37.076-29.293c2.813-.98 5.757-1.905 8.812-2.773c3.204 10.42 7.406 21.315 12.477 32.332c-5.137 11.18-9.399 22.249-12.634 32.792a134.718 134.718 0 0 1-6.318-1.979Zm12.378-84.26c-4.811-24.587-1.616-43.134 6.425-47.789c8.564-4.958 27.502 2.111 47.463 19.835a144.318 144.318 0 0 1 3.841 3.545c-7.438 7.987-14.787 17.08-21.808 26.988c-12.04 1.116-23.565 2.908-34.161 5.309a160.342 160.342 0 0 1-1.76-7.887Zm110.427 27.268a347.8 347.8 0 0 0-7.785-12.803c8.168 1.033 15.994 2.404 23.343 4.08c-2.206 7.072-4.956 14.465-8.193 22.045a381.151 381.151 0 0 0-7.365-13.322Zm-45.032-43.861c5.044 5.465 10.096 11.566 15.065 18.186a322.04 322.04 0 0 0-30.257-.006c4.974-6.559 10.069-12.652 15.192-18.18ZM82.802 87.83a323.167 323.167 0 0 0-7.227 13.238c-3.184-7.553-5.909-14.98-8.134-22.152c7.304-1.634 15.093-2.97 23.209-3.984a321.524 321.524 0 0 0-7.848 12.897Zm8.081 65.352c-8.385-.936-16.291-2.203-23.593-3.793c2.26-7.3 5.045-14.885 8.298-22.6a321.187 321.187 0 0 0 7.257 13.246c2.594 4.48 5.28 8.868 8.038 13.147Zm37.542 31.03c-5.184-5.592-10.354-11.779-15.403-18.433c4.902.192 9.899.29 14.978.29c5.218 0 10.376-.117 15.453-.343c-4.985 6.774-10.018 12.97-15.028 18.486Zm52.198-57.817c3.422 7.8 6.306 15.345 8.596 22.52c-7.422 1.694-15.436 3.058-23.88 4.071a382.417 382.417 0 0 0 7.859-13.026a347.403 347.403 0 0 0 7.425-13.565Zm-16.898 8.101a358.557 358.557 0 0 1-12.281 19.815a329.4 329.4 0 0 1-23.444.823c-7.967 0-15.716-.248-23.178-.732a310.202 310.202 0 0 1-12.513-19.846h.001a307.41 307.41 0 0 1-10.923-20.627a310.278 310.278 0 0 1 10.89-20.637l-.001.001a307.318 307.318 0 0 1 12.413-19.761c7.613-.576 15.42-.876 23.31-.876H128c7.926 0 15.743.303 23.354.883a329.357 329.357 0 0 1 12.335 19.695a358.489 358.489 0 0 1 11.036 20.54a329.472 329.472 0 0 1-11 20.722Zm22.56-122.124c8.572 4.944 11.906 24.881 6.52 51.026c-.344 1.668-.73 3.367-1.15 5.09c-10.622-2.452-22.155-4.275-34.23-5.408c-7.034-10.017-14.323-19.124-21.64-27.008a160.789 160.789 0 0 1 5.888-5.4c18.9-16.447 36.564-22.941 44.612-18.3ZM128 90.808c12.625 0 22.86 10.235 22.86 22.86s-10.235 22.86-22.86 22.86s-22.86-10.235-22.86-22.86s10.235-22.86 22.86-22.86Z&quot;&gt;&lt;/path&gt;&lt;/svg&gt;</file><file path="frontend/src/assets/vite.svg">&lt;svg xmlns=&quot;http://www.w3.org/2000/svg&quot; width=&quot;77&quot; height=&quot;47&quot; fill=&quot;none&quot; aria-labelledby=&quot;vite-logo-title&quot; viewBox=&quot;0 0 77 47&quot;&gt;&lt;title id=&quot;vite-logo-title&quot;&gt;Vite&lt;/title&gt;&lt;style&gt;.parenthesis{fill:#000}@media (prefers-color-scheme:dark){.parenthesis{fill:#fff}}&lt;/style&gt;&lt;path fill=&quot;#9135ff&quot; d=&quot;M40.151 45.71c-.663.844-2.02.374-2.02-.699V34.708a2.26 2.26 0 0 0-2.262-2.262H24.493c-.92 0-1.457-1.04-.92-1.788l7.479-10.471c1.07-1.498 0-3.578-1.842-3.578H15.443c-.92 0-1.456-1.04-.92-1.788l9.696-13.576c.213-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.472c-1.07 1.497 0 3.578 1.842 3.578h11.376c.944 0 1.474 1.087.89 1.83L40.153 45.712z&quot;/&gt;&lt;mask id=&quot;a&quot; width=&quot;48&quot; height=&quot;47&quot; x=&quot;14&quot; y=&quot;0&quot; maskUnits=&quot;userSpaceOnUse&quot; style=&quot;mask-type:alpha&quot;&gt;&lt;path fill=&quot;#000&quot; d=&quot;M40.047 45.71c-.663.843-2.02.374-2.02-.699V34.708a2.26 2.26 0 0 0-2.262-2.262H24.389c-.92 0-1.457-1.04-.92-1.788l7.479-10.472c1.07-1.497 0-3.578-1.842-3.578H15.34c-.92 0-1.456-1.04-.92-1.788l9.696-13.575c.213-.297.556-.474.92-.474H53.93c.92 0 1.456 1.04.92 1.788L47.37 13.03c-1.07 1.498 0 3.578 1.842 3.578h11.376c.944 0 1.474 1.088.89 1.831L40.049 45.712z&quot;/&gt;&lt;/mask&gt;&lt;g mask=&quot;url(#a)&quot;&gt;&lt;g filter=&quot;url(#b)&quot;&gt;&lt;ellipse cx=&quot;5.508&quot; cy=&quot;14.704&quot; fill=&quot;#eee6ff&quot; rx=&quot;5.508&quot; ry=&quot;14.704&quot; transform=&quot;rotate(269.814 20.96 11.29)scale(-1 1)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#c)&quot;&gt;&lt;ellipse cx=&quot;10.399&quot; cy=&quot;29.851&quot; fill=&quot;#eee6ff&quot; rx=&quot;10.399&quot; ry=&quot;29.851&quot; transform=&quot;rotate(89.814 -16.902 -8.275)scale(1 -1)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#d)&quot;&gt;&lt;ellipse cx=&quot;5.508&quot; cy=&quot;30.487&quot; fill=&quot;#8900ff&quot; rx=&quot;5.508&quot; ry=&quot;30.487&quot; transform=&quot;rotate(89.814 -19.197 -7.127)scale(1 -1)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#e)&quot;&gt;&lt;ellipse cx=&quot;5.508&quot; cy=&quot;30.599&quot; fill=&quot;#8900ff&quot; rx=&quot;5.508&quot; ry=&quot;30.599&quot; transform=&quot;rotate(89.814 -25.928 4.177)scale(1 -1)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#f)&quot;&gt;&lt;ellipse cx=&quot;5.508&quot; cy=&quot;30.599&quot; fill=&quot;#8900ff&quot; rx=&quot;5.508&quot; ry=&quot;30.599&quot; transform=&quot;rotate(89.814 -25.738 5.52)scale(1 -1)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#g)&quot;&gt;&lt;ellipse cx=&quot;14.072&quot; cy=&quot;22.078&quot; fill=&quot;#eee6ff&quot; rx=&quot;14.072&quot; ry=&quot;22.078&quot; transform=&quot;rotate(93.35 31.245 55.578)scale(-1 1)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#h)&quot;&gt;&lt;ellipse cx=&quot;3.47&quot; cy=&quot;21.501&quot; fill=&quot;#8900ff&quot; rx=&quot;3.47&quot; ry=&quot;21.501&quot; transform=&quot;rotate(89.009 35.419 55.202)scale(-1 1)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#i)&quot;&gt;&lt;ellipse cx=&quot;3.47&quot; cy=&quot;21.501&quot; fill=&quot;#8900ff&quot; rx=&quot;3.47&quot; ry=&quot;21.501&quot; transform=&quot;rotate(89.009 35.419 55.202)scale(-1 1)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#j)&quot;&gt;&lt;ellipse cx=&quot;14.592&quot; cy=&quot;9.743&quot; fill=&quot;#8900ff&quot; rx=&quot;4.407&quot; ry=&quot;29.108&quot; transform=&quot;rotate(39.51 14.592 9.743)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#k)&quot;&gt;&lt;ellipse cx=&quot;61.728&quot; cy=&quot;-5.321&quot; fill=&quot;#8900ff&quot; rx=&quot;4.407&quot; ry=&quot;29.108&quot; transform=&quot;rotate(37.892 61.728 -5.32)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#l)&quot;&gt;&lt;ellipse cx=&quot;55.618&quot; cy=&quot;7.104&quot; fill=&quot;#00c2ff&quot; rx=&quot;5.971&quot; ry=&quot;9.665&quot; transform=&quot;rotate(37.892 55.618 7.104)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#m)&quot;&gt;&lt;ellipse cx=&quot;12.326&quot; cy=&quot;39.103&quot; fill=&quot;#8900ff&quot; rx=&quot;4.407&quot; ry=&quot;29.108&quot; transform=&quot;rotate(37.892 12.326 39.103)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#n)&quot;&gt;&lt;ellipse cx=&quot;12.326&quot; cy=&quot;39.103&quot; fill=&quot;#8900ff&quot; rx=&quot;4.407&quot; ry=&quot;29.108&quot; transform=&quot;rotate(37.892 12.326 39.103)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#o)&quot;&gt;&lt;ellipse cx=&quot;49.857&quot; cy=&quot;30.678&quot; fill=&quot;#8900ff&quot; rx=&quot;4.407&quot; ry=&quot;29.108&quot; transform=&quot;rotate(37.892 49.857 30.678)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#p)&quot;&gt;&lt;ellipse cx=&quot;52.623&quot; cy=&quot;33.171&quot; fill=&quot;#00c2ff&quot; rx=&quot;5.971&quot; ry=&quot;15.297&quot; transform=&quot;rotate(37.892 52.623 33.17)&quot;/&gt;&lt;/g&gt;&lt;/g&gt;&lt;path d=&quot;M6.919 0c-9.198 13.166-9.252 33.575 0 46.789h6.215c-9.25-13.214-9.196-33.623 0-46.789zm62.424 0h-6.215c9.198 13.166 9.252 33.575 0 46.789h6.215c9.25-13.214 9.196-33.623 0-46.789&quot; class=&quot;parenthesis&quot;/&gt;&lt;defs&gt;&lt;filter id=&quot;b&quot; width=&quot;60.045&quot; height=&quot;41.654&quot; x=&quot;-5.564&quot; y=&quot;16.92&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17286&quot; stdDeviation=&quot;7.659&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;c&quot; width=&quot;90.34&quot; height=&quot;51.437&quot; x=&quot;-40.407&quot; y=&quot;-6.762&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17286&quot; stdDeviation=&quot;7.659&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;d&quot; width=&quot;79.355&quot; height=&quot;29.4&quot; x=&quot;-35.435&quot; y=&quot;2.801&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17286&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;e&quot; width=&quot;79.579&quot; height=&quot;29.4&quot; x=&quot;-30.84&quot; y=&quot;20.8&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17286&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;f&quot; width=&quot;79.579&quot; height=&quot;29.4&quot; x=&quot;-29.307&quot; y=&quot;21.949&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17286&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;g&quot; width=&quot;74.749&quot; height=&quot;58.852&quot; x=&quot;29.961&quot; y=&quot;-17.13&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17286&quot; stdDeviation=&quot;7.659&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;h&quot; width=&quot;61.377&quot; height=&quot;25.362&quot; x=&quot;37.754&quot; y=&quot;3.055&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17286&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;i&quot; width=&quot;61.377&quot; height=&quot;25.362&quot; x=&quot;37.754&quot; y=&quot;3.055&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17286&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;j&quot; width=&quot;56.045&quot; height=&quot;63.649&quot; x=&quot;-13.43&quot; y=&quot;-22.082&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17286&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;k&quot; width=&quot;54.814&quot; height=&quot;64.646&quot; x=&quot;34.321&quot; y=&quot;-37.644&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17286&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;l&quot; width=&quot;33.541&quot; height=&quot;35.313&quot; x=&quot;38.847&quot; y=&quot;-10.552&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17286&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;m&quot; width=&quot;54.814&quot; height=&quot;64.646&quot; x=&quot;-15.081&quot; y=&quot;6.78&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17286&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;n&quot; width=&quot;54.814&quot; height=&quot;64.646&quot; x=&quot;-15.081&quot; y=&quot;6.78&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17286&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;o&quot; width=&quot;54.814&quot; height=&quot;64.646&quot; x=&quot;22.45&quot; y=&quot;-1.645&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17286&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;p&quot; width=&quot;39.409&quot; height=&quot;43.623&quot; x=&quot;32.919&quot; y=&quot;11.36&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17286&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;/defs&gt;&lt;/svg&gt;</file><file path="frontend/src/api.ts">const API_BASE_URL = &quot;http://127.0.0.1:8000&quot;;
+
+export interface HealthResponse {
+  status: string;
+  service: string;
+}
+
+export interface ContactDetails {
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+}
+
+export interface EngagementEvent {
+  event_type: string;
+  occurred_at: string;
+  description: string | null;
+}
+
+export interface PendingFollowUp {
+  committed: boolean;
+  due_at: string | null;
+  description: string | null;
+}
+
+export interface LeadRecord {
+  lead_id: string;
+  contact: ContactDetails | null;
+  source: string | null;
+  age_days: number;
+  last_contact_date: string | null;
+  engagement_events: EngagementEvent[];
+  declared_need: string | null;
+  declared_fit: string | null;
+  stage: string | null;
+  pending_follow_up: PendingFollowUp;
+}
+
+export interface AgentResult {
+  agent_name: string;
+  status: string;
+  summary: string;
+  evidence: string[];
+  score: number | null;
+  details: Record&lt;string, unknown&gt;;
+}
+
+export interface WorkflowResponse {
+  workflow_id: string;
+  lead_id: string;
+  recommendation: string;
+  priority_score: number | null;
+  reasons: string[];
+  triggered_rules: string[];
+  agent_outputs: AgentResult[];
+  evidence: string[];
+  audit_reference: string;
+  errors: string[];
+}
+
+async function handleResponse&lt;T&gt;(response: Response): Promise&lt;T&gt; {
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(`API error ${response.status}: ${message}`);
+  }
+
+  return response.json() as Promise&lt;T&gt;;
+}
+
+export async function checkBackendHealth(): Promise&lt;HealthResponse&gt; {
+  const response = await fetch(`${API_BASE_URL}/health`);
+  return handleResponse&lt;HealthResponse&gt;(response);
+}
+
+export async function getLeads(): Promise&lt;LeadRecord[]&gt; {
+  const response = await fetch(`${API_BASE_URL}/leads`);
+  return handleResponse&lt;LeadRecord[]&gt;(response);
+}
+
+export async function runWorkflow(
+  lead: LeadRecord
+): Promise&lt;WorkflowResponse&gt; {
+  const response = await fetch(`${API_BASE_URL}/workflow/run`, {
+    method: &quot;POST&quot;,
+    headers: {
+      &quot;Content-Type&quot;: &quot;application/json&quot;,
+    },
+    body: JSON.stringify({ lead }),
+  });
+
+  return handleResponse&lt;WorkflowResponse&gt;(response);
+}</file><file path="frontend/src/App.css">.app-shell {
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 0 42px 28px;
+}
+
+.topbar {
+  min-height: 82px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #e7ebf2;
+  gap: 20px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.brand-mark {
+  width: 43px;
+  height: 43px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: #173b72;
+  color: white;
+  font-weight: 800;
+  letter-spacing: -1px;
+}
+
+.brand-name {
+  font-weight: 750;
+  font-size: 16px;
+  color: #172b4d;
+}
+
+.brand-subtitle {
+  color: #7b8799;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.connection {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.status-dot,
+.system-label-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #dc6470;
+}
+
+.status-dot.online,
+.system-label-dot {
+  background: #19a879;
+}
+
+.page-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 38px 0 27px;
+}
+
+.eyebrow {
+  color: #5476a7;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  margin: 0 0 9px;
+}
+
+.page-heading h1 {
+  color: #142b4d;
+  font-size: clamp(25px, 3vw, 34px);
+  letter-spacing: -1px;
+  margin: 0;
+}
+
+.page-description {
+  color: #718096;
+  max-width: 680px;
+  line-height: 1.7;
+  font-size: 14px;
+  margin: 10px 0 0;
+}
+
+.system-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #eaf7f1;
+  color: #187b59;
+  border: 1px solid #d1eee1;
+  border-radius: 30px;
+  padding: 9px 13px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.system-label-dot {
+  width: 7px;
+  height: 7px;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 15px;
+  margin-bottom: 22px;
+}
+
+.metric-card,
+.panel,
+.result-panel,
+.agents-panel,
+.evidence-panel {
+  background: white;
+  border: 1px solid #e5eaf1;
+  border-radius: 13px;
+}
+
+.metric-card {
+  padding: 19px 20px;
+  min-height: 112px;
+}
+
+.metric-label {
+  display: block;
+  color: #8290a3;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+.metric-card strong {
+  display: block;
+  font-size: 27px;
+  color: #17345e;
+  margin-top: 10px;
+}
+
+.metric-card .metric-note {
+  display: block;
+  font-size: 11px;
+  color: #8995a6;
+  margin-top: 3px;
+}
+
+.metric-card .metric-status {
+  color: #16845e;
+  font-size: 22px;
+}
+
+.workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.85fr) minmax(0, 2fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.panel {
+  padding: 23px;
+  min-width: 0;
+}
+
+.panel-heading,
+.results-heading,
+.section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.panel-heading h2,
+.results-heading h2 {
+  margin: 0;
+  color: #172e50;
+  font-size: 19px;
+}
+
+.count-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 29px;
+  height: 29px;
+  border-radius: 9px;
+  padding: 0 7px;
+  background: #edf3fb;
+  color: #315b91;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.lead-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 20px;
+}
+
+.lead-item {
+  width: 100%;
+  text-align: left;
+  border: 1px solid #e8edf4;
+  border-radius: 10px;
+  background: #fff;
+  padding: 14px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  color: #263a56;
+}
+
+.lead-item:hover {
+  border-color: #9bb5d8;
+  background: #f8faff;
+}
+
+.lead-item.selected {
+  border-color: #4778b8;
+  background: #f0f5fc;
+  box-shadow: inset 3px 0 #315f9e;
+}
+
+.lead-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.lead-id {
+  font-size: 10px;
+  color: #75849a;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.lead-item &gt; strong {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+
+.lead-meta {
+  color: #8390a1;
+  font-size: 11px;
+}
+
+.fit-tag {
+  font-size: 9px;
+  font-weight: 800;
+  border-radius: 5px;
+  padding: 4px 7px;
+  background: #edf0f4;
+  color: #67758a;
+}
+
+.fit-tag.high {
+  background: #e2f5eb;
+  color: #187d54;
+}
+
+.fit-tag.medium {
+  background: #fff3dc;
+  color: #9a6a14;
+}
+
+.fit-tag.low {
+  background: #fce9e9;
+  color: #ae4d4d;
+}
+
+.directory-note {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  margin-top: 22px;
+  padding-top: 17px;
+  border-top: 1px solid #edf0f4;
+  color: #7b899b;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.info-icon {
+  flex: 0 0 17px;
+  height: 17px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #eaf0f8;
+  color: #436b9d;
+  font-weight: 800;
+}
+
+.record-label {
+  color: #3973b6;
+  background: #edf4fd;
+  padding: 7px 10px;
+  border-radius: 7px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.profile-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 24px 0;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.avatar {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: #e8eff9;
+  color: #315c94;
+  font-size: 21px;
+  font-weight: 800;
+}
+
+.profile-header h3 {
+  margin: 0;
+  color: #1d3558;
+  font-size: 16px;
+}
+
+.profile-header p {
+  margin: 5px 0 0;
+  color: #8995a5;
+  font-size: 12px;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 24px;
+}
+
+.detail-field {
+  min-width: 0;
+}
+
+.detail-field span,
+.audit-field span {
+  display: block;
+  color: #8793a3;
+  font-size: 10px;
+  margin-bottom: 6px;
+}
+
+.detail-field strong,
+.audit-field strong {
+  display: block;
+  color: #344761;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+
+.full-width {
+  grid-column: 1 / -1;
+}
+
+.engagement-section {
+  border-top: 1px solid #edf0f4;
+  margin-top: 23px;
+  padding-top: 19px;
+}
+
+.engagement-section h3,
+.result-panel h3,
+.evidence-panel h3,
+.agents-panel h3 {
+  margin: 0 0 14px;
+  font-size: 14px;
+  color: #203957;
+}
+
+.event-list {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.event-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+}
+
+.event-marker {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: #5b86bf;
+  box-shadow: 0 0 0 4px #edf3fa;
+}
+
+.event-item strong {
+  color: #344761;
+  font-size: 12px;
+}
+
+.event-item p {
+  margin: 4px 0;
+  color: #75849a;
+  font-size: 11px;
+}
+
+.event-item span:last-child {
+  color: #9aa5b3;
+  font-size: 10px;
+}
+
+.run-button {
+  width: 100%;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 25px;
+  border: 0;
+  border-radius: 9px;
+  background: #214e86;
+  color: white;
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.run-button:hover:not(:disabled) {
+  background: #163b6d;
+}
+
+.run-button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.run-button span {
+  font-size: 19px;
+}
+
+.button-note {
+  text-align: center;
+  color: #98a2b1;
+  font-size: 10px;
+  margin: 10px 0 0;
+}
+
+.results-section {
+  margin-top: 25px;
+  padding: 25px;
+  border: 1px solid #e5eaf1;
+  border-radius: 13px;
+  background: #f8fafd;
+}
+
+.result-state {
+  border-radius: 20px;
+  background: #eef1f5;
+  color: #778396;
+  padding: 7px 10px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.result-state.complete {
+  background: #e4f5ed;
+  color: #17845d;
+}
+
+.empty-results {
+  text-align: center;
+  padding: 43px 15px;
+}
+
+.empty-icon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 14px;
+  border-radius: 14px;
+  background: #eaf0f8;
+  color: #4773a8;
+  font-size: 29px;
+}
+
+.empty-results h3 {
+  color: #294361;
+  font-size: 15px;
+  margin: 0 0 8px;
+}
+
+.empty-results p {
+  max-width: 490px;
+  margin: 0 auto;
+  color: #8793a3;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.loading-spinner {
+  width: 35px;
+  height: 35px;
+  margin: 0 auto 17px;
+  border: 3px solid #dce6f2;
+  border-top-color: #315f9e;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.result-content {
+  margin-top: 22px;
+}
+
+.recommendation-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  padding: 22px;
+  border: 1px solid;
+  border-radius: 12px;
+}
+
+.recommendation-card.urgent {
+  background: #fff0ef;
+  border-color: #f2d0cc;
+  color: #a33f3a;
+}
+
+.recommendation-card.soon {
+  background: #fff7e8;
+  border-color: #f1dfb8;
+  color: #946817;
+}
+
+.recommendation-card.nurture {
+  background: #edf5ff;
+  border-color: #d3e2f5;
+  color: #315f95;
+}
+
+.recommendation-card.request {
+  background: #f1effb;
+  border-color: #ded9f3;
+  color: #66569b;
+}
+
+.recommendation-label {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+}
+
+.recommendation-card h3 {
+  margin: 7px 0;
+  font-size: 21px;
+  letter-spacing: 0.2px;
+}
+
+.recommendation-card p {
+  margin: 0;
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+.recommendation-symbol {
+  width: 43px;
+  height: 43px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #ffffffa8;
+  font-size: 21px;
+  font-weight: 800;
+}
+
+.result-columns {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 15px;
+  margin-top: 16px;
+}
+
+.result-panel,
+.evidence-panel,
+.agents-panel {
+  padding: 20px;
+}
+
+.evidence-list {
+  padding-left: 19px;
+  margin: 0;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.8;
+}
+
+.evidence-list li {
+  padding-left: 3px;
+  margin-bottom: 5px;
+}
+
+.subheading {
+  margin-top: 22px !important;
+}
+
+.rule-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.rule-chip {
+  display: inline-block;
+  border-radius: 6px;
+  padding: 7px 9px;
+  background: #edf3fb;
+  color: #345e91;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.audit-field {
+  padding: 10px 0;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.audit-field:last-child {
+  border-bottom: 0;
+}
+
+.agents-panel {
+  margin-top: 16px;
+}
+
+.section-title-row {
+  margin-bottom: 17px;
+}
+
+.section-title-row .eyebrow {
+  margin-bottom: 6px;
+}
+
+.section-title-row h3 {
+  margin: 0;
+}
+
+.agent-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.agent-card {
+  min-width: 0;
+  border: 1px solid #e7ecf3;
+  border-radius: 10px;
+  padding: 15px;
+  background: #fcfdff;
+}
+
+.agent-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.agent-number {
+  color: #9ba9ba;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.agent-status {
+  background: #e8f5ee;
+  color: #27815c;
+  border-radius: 5px;
+  padding: 4px 6px;
+  font-size: 9px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.agent-card h4 {
+  margin: 12px 0 7px;
+  color: #2a405e;
+  font-size: 12px;
+}
+
+.agent-card p,
+.agent-card li {
+  color: #77869a;
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.agent-card p {
+  margin: 0;
+}
+
+.agent-card ul {
+  padding-left: 15px;
+  margin: 9px 0 0;
+}
+
+.evidence-panel {
+  margin-top: 16px;
+}
+
+.evidence-panel h3 {
+  margin-bottom: 12px;
+}
+
+.muted {
+  color: #8a96a6;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.error-banner {
+  margin: 15px 0;
+  border: 1px solid #f0c7c7;
+  border-radius: 9px;
+  background: #fff0f0;
+  color: #a23c3c;
+  padding: 12px 15px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+  padding: 22px 2px 0;
+  color: #9aa4b2;
+  font-size: 10px;
+}
+
+@media (max-width: 1000px) {
+  .app-shell {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+
+  .metrics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workspace-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .lead-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .agent-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 650px) {
+  .app-shell {
+    padding: 0 15px 22px;
+  }
+
+  .topbar {
+    min-height: 70px;
+  }
+
+  .brand-subtitle {
+    font-size: 10px;
+  }
+
+  .connection {
+    font-size: 10px;
+  }
+
+  .page-heading {
+    display: block;
+    padding: 28px 0 20px;
+  }
+
+  .system-label {
+    display: inline-flex;
+    margin-top: 17px;
+  }
+
+  .metrics-grid {
+    gap: 9px;
+  }
+
+  .metric-card {
+    padding: 14px;
+    min-height: 105px;
+  }
+
+  .metric-card strong {
+    font-size: 23px;
+  }
+
+  .metric-label {
+    font-size: 9px;
+  }
+
+  .panel,
+  .results-section {
+    padding: 17px;
+  }
+
+  .lead-list {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-grid {
+    gap: 15px;
+  }
+
+  .result-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .recommendation-card h3 {
+    font-size: 17px;
+  }
+
+  .footer {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 380px) {
+  .connection {
+    max-width: 105px;
+    line-height: 1.4;
+  }
+
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .full-width {
+    grid-column: auto;
+  }
+}</file><file path="frontend/src/App.tsx">import { useEffect, useMemo, useState } from &quot;react&quot;;
+import {
+  checkBackendHealth,
+  getLeads,
+  runWorkflow,
+  type HealthResponse,
+  type LeadRecord,
+  type WorkflowResponse,
+} from &quot;./api&quot;;
+import &quot;./App.css&quot;;
+
+function App() {
+  const [health, setHealth] = useState&lt;HealthResponse | null&gt;(null);
+  const [leads, setLeads] = useState&lt;LeadRecord[]&gt;([]);
+  const [selectedLeadId, setSelectedLeadId] = useState(&quot;&quot;);
+  const [result, setResult] = useState&lt;WorkflowResponse | null&gt;(null);
+  const [loading, setLoading] = useState(true);
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState(&quot;&quot;);
+
+  const selectedLead = leads.find((lead) =&gt; lead.lead_id === selectedLeadId) ?? null;
+
+  const attentionCount = useMemo(
+    () =&gt; leads.filter((lead) =&gt; lead.pending_follow_up.committed).length,
+    [leads]
+  );
+
+  useEffect(() =&gt; {
+    async function loadDashboard() {
+      try {
+        setLoading(true);
+        setError(&quot;&quot;);
+
+        const [healthData, leadData] = await Promise.all([
+          checkBackendHealth(),
+          getLeads(),
+        ]);
+
+        setHealth(healthData);
+        setLeads(leadData);
+
+        if (leadData.length &gt; 0) {
+          setSelectedLeadId(leadData[0].lead_id);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : &quot;Unable to load dashboard.&quot;);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadDashboard();
+  }, []);
+
+  async function handleRunWorkflow() {
+    if (!selectedLead) return;
+
+    try {
+      setRunning(true);
+      setError(&quot;&quot;);
+      setResult(null);
+
+      const workflowResult = await runWorkflow(selectedLead);
+      setResult(workflowResult);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : &quot;Workflow execution failed.&quot;);
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  function selectLead(leadId: string) {
+    setSelectedLeadId(leadId);
+    setResult(null);
+    setError(&quot;&quot;);
+  }
+
+  function recommendationClass(recommendation: string) {
+    if (recommendation === &quot;FOLLOW_UP_NOW&quot;) return &quot;urgent&quot;;
+    if (recommendation === &quot;FOLLOW_UP_SOON&quot;) return &quot;soon&quot;;
+    if (recommendation === &quot;NURTURE&quot;) return &quot;nurture&quot;;
+    return &quot;request&quot;;
+  }
+
+  function displayValue(value: string | null | undefined) {
+    return value || &quot;Not provided&quot;;
+  }
+
+  return (
+    &lt;main className=&quot;app-shell&quot;&gt;
+      &lt;header className=&quot;topbar&quot;&gt;
+        &lt;div className=&quot;brand&quot;&gt;
+          &lt;div className=&quot;brand-mark&quot;&gt;A7&lt;/div&gt;
+          &lt;div&gt;
+            &lt;div className=&quot;brand-name&quot;&gt;AA007 Intelligence&lt;/div&gt;
+            &lt;div className=&quot;brand-subtitle&quot;&gt;Sales Operations · Lead Prioritization&lt;/div&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+
+        &lt;div className=&quot;connection&quot;&gt;
+          &lt;span className={`status-dot ${health ? &quot;online&quot; : &quot;offline&quot;}`} /&gt;
+          &lt;span&gt;{health ? &quot;Backend connected&quot; : &quot;Backend unavailable&quot;}&lt;/span&gt;
+        &lt;/div&gt;
+      &lt;/header&gt;
+
+      &lt;section className=&quot;page-heading&quot;&gt;
+        &lt;div&gt;
+          &lt;p className=&quot;eyebrow&quot;&gt;AGENTIC AI MVP · WORKSPACE&lt;/p&gt;
+          &lt;h1&gt;Lead Follow-up Intelligence&lt;/h1&gt;
+          &lt;p className=&quot;page-description&quot;&gt;
+            Evaluate lead recency, engagement, fit and follow-up commitments
+            to generate evidence-based prioritization decisions.
+          &lt;/p&gt;
+        &lt;/div&gt;
+        &lt;div className=&quot;system-label&quot;&gt;
+          &lt;span className=&quot;system-label-dot&quot; /&gt;
+          Deterministic workflow engine
+        &lt;/div&gt;
+      &lt;/section&gt;
+
+      {error &amp;&amp; &lt;div className=&quot;error-banner&quot;&gt;{error}&lt;/div&gt;}
+
+      &lt;section className=&quot;metrics-grid&quot;&gt;
+        &lt;article className=&quot;metric-card&quot;&gt;
+          &lt;span className=&quot;metric-label&quot;&gt;TOTAL LEADS&lt;/span&gt;
+          &lt;strong&gt;{loading ? &quot;—&quot; : leads.length}&lt;/strong&gt;
+          &lt;span className=&quot;metric-note&quot;&gt;Available sample records&lt;/span&gt;
+        &lt;/article&gt;
+        &lt;article className=&quot;metric-card&quot;&gt;
+          &lt;span className=&quot;metric-label&quot;&gt;COMMITTED FOLLOW-UPS&lt;/span&gt;
+          &lt;strong&gt;{loading ? &quot;—&quot; : attentionCount}&lt;/strong&gt;
+          &lt;span className=&quot;metric-note&quot;&gt;Require deadline evaluation&lt;/span&gt;
+        &lt;/article&gt;
+        &lt;article className=&quot;metric-card&quot;&gt;
+          &lt;span className=&quot;metric-label&quot;&gt;AGENT FRAMEWORK&lt;/span&gt;
+          &lt;strong&gt;05&lt;/strong&gt;
+          &lt;span className=&quot;metric-note&quot;&gt;Specialized workflow agents&lt;/span&gt;
+        &lt;/article&gt;
+        &lt;article className=&quot;metric-card&quot;&gt;
+          &lt;span className=&quot;metric-label&quot;&gt;WORKFLOW STATUS&lt;/span&gt;
+          &lt;strong className=&quot;metric-status&quot;&gt;
+            {result ? &quot;Complete&quot; : running ? &quot;Running&quot; : &quot;Ready&quot;}
+          &lt;/strong&gt;
+          &lt;span className=&quot;metric-note&quot;&gt;Current session&lt;/span&gt;
+        &lt;/article&gt;
+      &lt;/section&gt;
+
+      &lt;div className=&quot;workspace-grid&quot;&gt;
+        &lt;aside className=&quot;panel lead-panel&quot;&gt;
+          &lt;div className=&quot;panel-heading&quot;&gt;
+            &lt;div&gt;
+              &lt;p className=&quot;eyebrow&quot;&gt;RECORDS&lt;/p&gt;
+              &lt;h2&gt;Lead directory&lt;/h2&gt;
+            &lt;/div&gt;
+            &lt;span className=&quot;count-badge&quot;&gt;{leads.length}&lt;/span&gt;
+          &lt;/div&gt;
+
+          {loading ? (
+            &lt;p className=&quot;muted&quot;&gt;Loading leads...&lt;/p&gt;
+          ) : leads.length === 0 ? (
+            &lt;p className=&quot;muted&quot;&gt;No lead records available.&lt;/p&gt;
+          ) : (
+            &lt;div className=&quot;lead-list&quot;&gt;
+              {leads.map((lead) =&gt; (
+                &lt;button
+                  className={`lead-item ${selectedLeadId === lead.lead_id ? &quot;selected&quot; : &quot;&quot;}`}
+                  key={lead.lead_id}
+                  onClick={() =&gt; selectLead(lead.lead_id)}
+                &gt;
+                  &lt;div className=&quot;lead-item-top&quot;&gt;
+                    &lt;span className=&quot;lead-id&quot;&gt;{lead.lead_id}&lt;/span&gt;
+                    &lt;span className={`fit-tag ${(lead.declared_fit || &quot;unknown&quot;).toLowerCase()}`}&gt;
+                      {lead.declared_fit || &quot;UNKNOWN&quot;}
+                    &lt;/span&gt;
+                  &lt;/div&gt;
+                  &lt;strong&gt;{lead.contact?.name || &quot;Unnamed lead&quot;}&lt;/strong&gt;
+                  &lt;span className=&quot;lead-meta&quot;&gt;
+                    {lead.stage || &quot;No stage&quot;} · {lead.age_days} days old
+                  &lt;/span&gt;
+                &lt;/button&gt;
+              ))}
+            &lt;/div&gt;
+          )}
+
+          &lt;div className=&quot;directory-note&quot;&gt;
+            &lt;span className=&quot;info-icon&quot;&gt;i&lt;/span&gt;
+            Select a lead to inspect its details and run the prioritization workflow.
+          &lt;/div&gt;
+        &lt;/aside&gt;
+
+        &lt;section className=&quot;panel detail-panel&quot;&gt;
+          &lt;div className=&quot;panel-heading&quot;&gt;
+            &lt;div&gt;
+              &lt;p className=&quot;eyebrow&quot;&gt;LEAD PROFILE&lt;/p&gt;
+              &lt;h2&gt;Lead details&lt;/h2&gt;
+            &lt;/div&gt;
+            {selectedLead &amp;&amp; &lt;span className=&quot;record-label&quot;&gt;Selected record&lt;/span&gt;}
+          &lt;/div&gt;
+
+          {!selectedLead ? (
+            &lt;p className=&quot;muted&quot;&gt;Select a lead to view its information.&lt;/p&gt;
+          ) : (
+            &lt;&gt;
+              &lt;div className=&quot;profile-header&quot;&gt;
+                &lt;div className=&quot;avatar&quot;&gt;
+                  {(selectedLead.contact?.name || &quot;L&quot;).charAt(0).toUpperCase()}
+                &lt;/div&gt;
+                &lt;div&gt;
+                  &lt;h3&gt;{selectedLead.contact?.name || selectedLead.lead_id}&lt;/h3&gt;
+                  &lt;p&gt;{selectedLead.contact?.email || selectedLead.lead_id}&lt;/p&gt;
+                &lt;/div&gt;
+              &lt;/div&gt;
+
+              &lt;div className=&quot;detail-grid&quot;&gt;
+                &lt;div className=&quot;detail-field&quot;&gt;
+                  &lt;span&gt;Lead ID&lt;/span&gt;
+                  &lt;strong&gt;{selectedLead.lead_id}&lt;/strong&gt;
+                &lt;/div&gt;
+                &lt;div className=&quot;detail-field&quot;&gt;
+                  &lt;span&gt;Source&lt;/span&gt;
+                  &lt;strong&gt;{displayValue(selectedLead.source)}&lt;/strong&gt;
+                &lt;/div&gt;
+                &lt;div className=&quot;detail-field&quot;&gt;
+                  &lt;span&gt;Current stage&lt;/span&gt;
+                  &lt;strong&gt;{displayValue(selectedLead.stage)}&lt;/strong&gt;
+                &lt;/div&gt;
+                &lt;div className=&quot;detail-field&quot;&gt;
+                  &lt;span&gt;Lead age&lt;/span&gt;
+                  &lt;strong&gt;{selectedLead.age_days} days&lt;/strong&gt;
+                &lt;/div&gt;
+                &lt;div className=&quot;detail-field&quot;&gt;
+                  &lt;span&gt;Declared fit&lt;/span&gt;
+                  &lt;strong&gt;{displayValue(selectedLead.declared_fit)}&lt;/strong&gt;
+                &lt;/div&gt;
+                &lt;div className=&quot;detail-field&quot;&gt;
+                  &lt;span&gt;Last contact&lt;/span&gt;
+                  &lt;strong&gt;{displayValue(selectedLead.last_contact_date)}&lt;/strong&gt;
+                &lt;/div&gt;
+                &lt;div className=&quot;detail-field full-width&quot;&gt;
+                  &lt;span&gt;Declared need&lt;/span&gt;
+                  &lt;strong&gt;{displayValue(selectedLead.declared_need)}&lt;/strong&gt;
+                &lt;/div&gt;
+                &lt;div className=&quot;detail-field full-width&quot;&gt;
+                  &lt;span&gt;Follow-up commitment&lt;/span&gt;
+                  &lt;strong&gt;
+                    {selectedLead.pending_follow_up.committed ? &quot;Committed&quot; : &quot;No committed follow-up&quot;}
+                    {selectedLead.pending_follow_up.due_at
+                      ? ` · Due ${selectedLead.pending_follow_up.due_at}`
+                      : &quot;&quot;}
+                  &lt;/strong&gt;
+                &lt;/div&gt;
+              &lt;/div&gt;
+
+              &lt;div className=&quot;engagement-section&quot;&gt;
+                &lt;h3&gt;Engagement history&lt;/h3&gt;
+                {selectedLead.engagement_events.length === 0 ? (
+                  &lt;p className=&quot;muted&quot;&gt;No engagement events recorded.&lt;/p&gt;
+                ) : (
+                  &lt;div className=&quot;event-list&quot;&gt;
+                    {selectedLead.engagement_events.map((event, index) =&gt; (
+                      &lt;div className=&quot;event-item&quot; key={`${event.event_type}-${index}`}&gt;
+                        &lt;span className=&quot;event-marker&quot; /&gt;
+                        &lt;div&gt;
+                          &lt;strong&gt;{event.event_type}&lt;/strong&gt;
+                          &lt;p&gt;{event.description || &quot;No additional description&quot;}&lt;/p&gt;
+                          &lt;span&gt;{event.occurred_at}&lt;/span&gt;
+                        &lt;/div&gt;
+                      &lt;/div&gt;
+                    ))}
+                  &lt;/div&gt;
+                )}
+              &lt;/div&gt;
+
+              &lt;button
+                className=&quot;run-button&quot;
+                onClick={handleRunWorkflow}
+                disabled={running || loading}
+              &gt;
+                {running ? &quot;Executing five agents...&quot; : &quot;Run Prioritization&quot;}
+                {!running &amp;&amp; &lt;span aria-hidden=&quot;true&quot;&gt;→&lt;/span&gt;}
+              &lt;/button&gt;
+              &lt;p className=&quot;button-note&quot;&gt;
+                Runs the five-agent workflow against the selected lead record.
+              &lt;/p&gt;
+            &lt;/&gt;
+          )}
+        &lt;/section&gt;
+      &lt;/div&gt;
+
+      &lt;section className=&quot;results-section&quot;&gt;
+        &lt;div className=&quot;results-heading&quot;&gt;
+          &lt;div&gt;
+            &lt;p className=&quot;eyebrow&quot;&gt;DECISION INTELLIGENCE&lt;/p&gt;
+            &lt;h2&gt;Workflow results&lt;/h2&gt;
+          &lt;/div&gt;
+          &lt;span className={`result-state ${result ? &quot;complete&quot; : &quot;&quot;}`}&gt;
+            {running ? &quot;PROCESSING&quot; : result ? &quot;COMPLETED&quot; : &quot;AWAITING EXECUTION&quot;}
+          &lt;/span&gt;
+        &lt;/div&gt;
+
+        {!result &amp;&amp; !running &amp;&amp; (
+          &lt;div className=&quot;empty-results&quot;&gt;
+            &lt;div className=&quot;empty-icon&quot;&gt;◎&lt;/div&gt;
+            &lt;h3&gt;No workflow results yet&lt;/h3&gt;
+            &lt;p&gt;Select a lead and run prioritization to see the recommendation,
+              agent outputs, decision rules and supporting evidence.&lt;/p&gt;
+          &lt;/div&gt;
+        )}
+
+        {running &amp;&amp; (
+          &lt;div className=&quot;empty-results&quot;&gt;
+            &lt;div className=&quot;loading-spinner&quot; /&gt;
+            &lt;h3&gt;Analyzing lead information&lt;/h3&gt;
+            &lt;p&gt;The workflow agents are evaluating the selected record.&lt;/p&gt;
+          &lt;/div&gt;
+        )}
+
+        {result &amp;&amp; (
+          &lt;div className=&quot;result-content&quot;&gt;
+            &lt;div className={`recommendation-card ${recommendationClass(result.recommendation)}`}&gt;
+              &lt;div&gt;
+                &lt;span className=&quot;recommendation-label&quot;&gt;RECOMMENDED ACTION&lt;/span&gt;
+                &lt;h3&gt;{result.recommendation.replaceAll(&quot;_&quot;, &quot; &quot;)}&lt;/h3&gt;
+                &lt;p&gt;Lead: {result.lead_id}&lt;/p&gt;
+              &lt;/div&gt;
+              &lt;div className=&quot;recommendation-symbol&quot;&gt;✓&lt;/div&gt;
+            &lt;/div&gt;
+
+            &lt;div className=&quot;result-columns&quot;&gt;
+              &lt;div className=&quot;result-panel&quot;&gt;
+                &lt;h3&gt;Decision reasoning&lt;/h3&gt;
+                {result.reasons.length &gt; 0 ? (
+                  &lt;ul className=&quot;evidence-list&quot;&gt;
+                    {result.reasons.map((reason, index) =&gt; (
+                      &lt;li key={index}&gt;{reason}&lt;/li&gt;
+                    ))}
+                  &lt;/ul&gt;
+                ) : (
+                  &lt;p className=&quot;muted&quot;&gt;No additional reasons returned.&lt;/p&gt;
+                )}
+
+                &lt;h3 className=&quot;subheading&quot;&gt;Triggered rules&lt;/h3&gt;
+                &lt;div className=&quot;rule-list&quot;&gt;
+                  {result.triggered_rules.length &gt; 0 ? result.triggered_rules.map((rule) =&gt; (
+                    &lt;span className=&quot;rule-chip&quot; key={rule}&gt;{rule}&lt;/span&gt;
+                  )) : &lt;span className=&quot;muted&quot;&gt;No rules returned.&lt;/span&gt;}
+                &lt;/div&gt;
+              &lt;/div&gt;
+
+              &lt;div className=&quot;result-panel&quot;&gt;
+                &lt;h3&gt;Execution audit&lt;/h3&gt;
+                &lt;div className=&quot;audit-field&quot;&gt;
+                  &lt;span&gt;Workflow ID&lt;/span&gt;
+                  &lt;strong&gt;{result.workflow_id}&lt;/strong&gt;
+                &lt;/div&gt;
+                &lt;div className=&quot;audit-field&quot;&gt;
+                  &lt;span&gt;Audit reference&lt;/span&gt;
+                  &lt;strong&gt;{result.audit_reference}&lt;/strong&gt;
+                &lt;/div&gt;
+                &lt;div className=&quot;audit-field&quot;&gt;
+                  &lt;span&gt;Agent count&lt;/span&gt;
+                  &lt;strong&gt;{result.agent_outputs.length}&lt;/strong&gt;
+                &lt;/div&gt;
+                {result.priority_score !== null &amp;&amp; (
+                  &lt;div className=&quot;audit-field&quot;&gt;
+                    &lt;span&gt;Priority score&lt;/span&gt;
+                    &lt;strong&gt;{result.priority_score}&lt;/strong&gt;
+                  &lt;/div&gt;
+                )}
+              &lt;/div&gt;
+            &lt;/div&gt;
+
+            &lt;div className=&quot;agents-panel&quot;&gt;
+              &lt;div className=&quot;section-title-row&quot;&gt;
+                &lt;div&gt;
+                  &lt;p className=&quot;eyebrow&quot;&gt;MULTI-AGENT EXECUTION&lt;/p&gt;
+                  &lt;h3&gt;Agent activity&lt;/h3&gt;
+                &lt;/div&gt;
+                &lt;span className=&quot;count-badge&quot;&gt;{result.agent_outputs.length} agents&lt;/span&gt;
+              &lt;/div&gt;
+
+              &lt;div className=&quot;agent-grid&quot;&gt;
+                {result.agent_outputs.map((agent, index) =&gt; (
+                  &lt;article className=&quot;agent-card&quot; key={`${agent.agent_name}-${index}`}&gt;
+                    &lt;div className=&quot;agent-card-top&quot;&gt;
+                      &lt;span className=&quot;agent-number&quot;&gt;0{index + 1}&lt;/span&gt;
+                      &lt;span className=&quot;agent-status&quot;&gt;{agent.status}&lt;/span&gt;
+                    &lt;/div&gt;
+                    &lt;h4&gt;{agent.agent_name}&lt;/h4&gt;
+                    &lt;p&gt;{agent.summary}&lt;/p&gt;
+                    {agent.evidence.length &gt; 0 &amp;&amp; (
+                      &lt;ul&gt;
+                        {agent.evidence.map((item, evidenceIndex) =&gt; (
+                          &lt;li key={evidenceIndex}&gt;{item}&lt;/li&gt;
+                        ))}
+                      &lt;/ul&gt;
+                    )}
+                  &lt;/article&gt;
+                ))}
+              &lt;/div&gt;
+            &lt;/div&gt;
+
+            &lt;div className=&quot;evidence-panel&quot;&gt;
+              &lt;h3&gt;Consolidated evidence&lt;/h3&gt;
+              {result.evidence.length &gt; 0 ? (
+                &lt;ul className=&quot;evidence-list&quot;&gt;
+                  {result.evidence.map((item, index) =&gt; (
+                    &lt;li key={index}&gt;{item}&lt;/li&gt;
+                  ))}
+                &lt;/ul&gt;
+              ) : (
+                &lt;p className=&quot;muted&quot;&gt;No consolidated evidence returned.&lt;/p&gt;
+              )}
+            &lt;/div&gt;
+
+            {result.errors.length &gt; 0 &amp;&amp; (
+              &lt;div className=&quot;error-banner&quot;&gt;
+                {result.errors.map((item, index) =&gt; &lt;p key={index}&gt;{item}&lt;/p&gt;)}
+              &lt;/div&gt;
+            )}
+          &lt;/div&gt;
+        )}
+      &lt;/section&gt;
+
+      &lt;footer className=&quot;footer&quot;&gt;
+        &lt;span&gt;AA007 · Lead Follow-up Prioritization Intelligence&lt;/span&gt;
+        &lt;span&gt;Phase 1.1 MVP · Deterministic agent workflow&lt;/span&gt;
+      &lt;/footer&gt;
+    &lt;/main&gt;
+  );
+}
+
+export default App;</file><file path="frontend/src/index.css">:root {
+  font-family: Inter, &quot;Segoe UI&quot;, Arial, sans-serif;
+  color: #26364d;
+  background: #f4f7fb;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  min-height: 100%;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background: #f4f7fb;
+}
+
+button {
+  font: inherit;
+}
+
+button:focus-visible {
+  outline: 3px solid #8bb4e5;
+  outline-offset: 3px;
+}
+
+#root {
+  min-height: 100vh;
+}</file><file path="frontend/src/main.tsx">import { StrictMode } from &apos;react&apos;
+import { createRoot } from &apos;react-dom/client&apos;
+import &apos;./index.css&apos;
+import App from &apos;./App.tsx&apos;
+
+createRoot(document.getElementById(&apos;root&apos;)!).render(
+  &lt;StrictMode&gt;
+    &lt;App /&gt;
+  &lt;/StrictMode&gt;,
+)</file><file path="frontend/.gitignore"># Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?</file><file path="frontend/.oxlintrc.json">{
+  &quot;$schema&quot;: &quot;./node_modules/oxlint/configuration_schema.json&quot;,
+  &quot;plugins&quot;: [&quot;react&quot;, &quot;typescript&quot;, &quot;oxc&quot;],
+  &quot;rules&quot;: {
+    &quot;react/rules-of-hooks&quot;: &quot;error&quot;,
+    &quot;react/only-export-components&quot;: [&quot;warn&quot;, { &quot;allowConstantExport&quot;: true }]
+  }
+}</file><file path="frontend/index.html">&lt;!doctype html&gt;
+&lt;html lang=&quot;en&quot;&gt;
+  &lt;head&gt;
+    &lt;meta charset=&quot;UTF-8&quot; /&gt;
+    &lt;link rel=&quot;icon&quot; type=&quot;image/svg+xml&quot; href=&quot;/favicon.svg&quot; /&gt;
+    &lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1.0&quot; /&gt;
+    &lt;title&gt;frontend&lt;/title&gt;
+  &lt;/head&gt;
+  &lt;body&gt;
+    &lt;div id=&quot;root&quot;&gt;&lt;/div&gt;
+    &lt;script type=&quot;module&quot; src=&quot;/src/main.tsx&quot;&gt;&lt;/script&gt;
+  &lt;/body&gt;
+&lt;/html&gt;</file><file path="frontend/package.json">{
+  &quot;name&quot;: &quot;frontend&quot;,
+  &quot;private&quot;: true,
+  &quot;version&quot;: &quot;0.0.0&quot;,
+  &quot;type&quot;: &quot;module&quot;,
+  &quot;scripts&quot;: {
+    &quot;dev&quot;: &quot;vite&quot;,
+    &quot;build&quot;: &quot;tsc -b &amp;&amp; vite build&quot;,
+    &quot;lint&quot;: &quot;oxlint&quot;,
+    &quot;preview&quot;: &quot;vite preview&quot;
+  },
+  &quot;dependencies&quot;: {
+    &quot;react&quot;: &quot;^19.3.1&quot;,
+    &quot;react-dom&quot;: &quot;^19.3.1&quot;
+  },
+  &quot;devDependencies&quot;: {
+    &quot;@types/node&quot;: &quot;^24.19.2&quot;,
+    &quot;@types/react&quot;: &quot;^19.3.0&quot;,
+    &quot;@types/react-dom&quot;: &quot;^19.3.0&quot;,
+    &quot;@vitejs/plugin-react&quot;: &quot;^6.1.2&quot;,
+    &quot;oxlint&quot;: &quot;^1.90.0&quot;,
+    &quot;typescript&quot;: &quot;~7.0.2&quot;,
+    &quot;vite&quot;: &quot;^8.3.6&quot;
+  }
+}</file><file path="frontend/README.md"># React + TypeScript + Vite
+
+This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+
+Currently, two official plugins are available:
+
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+
+## React Compiler
+
+The React Compiler is not enabled on this template because of its impact on dev &amp; build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+
+## Expanding the Oxlint configuration
+
+If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+
+```json
+{
+  &quot;$schema&quot;: &quot;./node_modules/oxlint/configuration_schema.json&quot;,
+  &quot;plugins&quot;: [&quot;react&quot;, &quot;typescript&quot;, &quot;oxc&quot;],
+  &quot;options&quot;: {
+    &quot;typeAware&quot;: true
+  },
+  &quot;rules&quot;: {
+    &quot;react/rules-of-hooks&quot;: &quot;error&quot;,
+    &quot;react/only-export-components&quot;: [&quot;warn&quot;, { &quot;allowConstantExport&quot;: true }]
+  }
+}
+```
+
+See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.</file><file path="frontend/tsconfig.app.json">{
+  &quot;compilerOptions&quot;: {
+    &quot;tsBuildInfoFile&quot;: &quot;./node_modules/.tmp/tsconfig.app.tsbuildinfo&quot;,
+    &quot;target&quot;: &quot;es2023&quot;,
+    &quot;lib&quot;: [&quot;ES2023&quot;, &quot;DOM&quot;],
+    &quot;module&quot;: &quot;esnext&quot;,
+    &quot;types&quot;: [&quot;vite/client&quot;],
+    &quot;allowArbitraryExtensions&quot;: true,
+    &quot;skipLibCheck&quot;: true,
+
+    /* Bundler mode */
+    &quot;moduleResolution&quot;: &quot;bundler&quot;,
+    &quot;allowImportingTsExtensions&quot;: true,
+    &quot;verbatimModuleSyntax&quot;: true,
+    &quot;moduleDetection&quot;: &quot;force&quot;,
+    &quot;noEmit&quot;: true,
+    &quot;jsx&quot;: &quot;react-jsx&quot;,
+
+    /* Linting */
+    &quot;noUnusedLocals&quot;: true,
+    &quot;noUnusedParameters&quot;: true,
+    &quot;erasableSyntaxOnly&quot;: true,
+    &quot;noFallthroughCasesInSwitch&quot;: true
+  },
+  &quot;include&quot;: [&quot;src&quot;]
+}</file><file path="frontend/tsconfig.json">{
+  &quot;files&quot;: [],
+  &quot;references&quot;: [
+    { &quot;path&quot;: &quot;./tsconfig.app.json&quot; },
+    { &quot;path&quot;: &quot;./tsconfig.node.json&quot; }
+  ]
+}</file><file path="frontend/tsconfig.node.json">{
+  &quot;compilerOptions&quot;: {
+    &quot;tsBuildInfoFile&quot;: &quot;./node_modules/.tmp/tsconfig.node.tsbuildinfo&quot;,
+    &quot;target&quot;: &quot;es2023&quot;,
+    &quot;lib&quot;: [&quot;ES2023&quot;],
+    &quot;types&quot;: [&quot;node&quot;],
+    &quot;skipLibCheck&quot;: true,
+
+    /* Bundler mode */
+    &quot;module&quot;: &quot;nodenext&quot;,
+    &quot;allowImportingTsExtensions&quot;: true,
+    &quot;verbatimModuleSyntax&quot;: true,
+    &quot;moduleDetection&quot;: &quot;force&quot;,
+    &quot;noEmit&quot;: true,
+
+    /* Linting */
+    &quot;noUnusedLocals&quot;: true,
+    &quot;noUnusedParameters&quot;: true,
+    &quot;erasableSyntaxOnly&quot;: true,
+    &quot;noFallthroughCasesInSwitch&quot;: true
+  },
+  &quot;include&quot;: [&quot;vite.config.ts&quot;]
+}</file><file path="frontend/vite.config.ts">import react from &apos;@vitejs/plugin-react&apos;
+import { defineConfig } from &apos;vite&apos;
+
+// https://vite.dev/config/
+export default defineConfig({
+  plugins: [react()],
+})</file><file path=".gitignore"># Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# Node and frontend
+node_modules/
+dist/
+build/
+.vite/
+
+# IDE and operating system
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak</file><file path="backend/app/main.py">from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.data.seed_leads import get_seed_leads
+from app.models.schemas import (
+    LeadRecord,
+    WorkflowRequest,
+    WorkflowResponse,
+)
+from app.services.workflow_service import LeadWorkflowService
+
+
+app = FastAPI(
+    title=&quot;AA007 - Lead Follow-up Prioritization Intelligence&quot;,
+    description=&quot;Deterministic agentic AI MVP for lead follow-up prioritization.&quot;,
+    version=&quot;0.1.0&quot;,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[&quot;http://127.0.0.1:5173&quot;],
+    allow_credentials=True,
+    allow_methods=[&quot;*&quot;],
+    allow_headers=[&quot;*&quot;],
+)
+
+workflow_service = LeadWorkflowService()
+
+
+@app.get(&quot;/&quot;)
+def root():
+    return {
+        &quot;project&quot;: &quot;AA007 - Lead Follow-up Prioritization Intelligence&quot;,
+        &quot;status&quot;: &quot;running&quot;,
+        &quot;message&quot;: &quot;Welcome to the AA007 API&quot;,
+    }
+
+
+@app.get(&quot;/health&quot;)
+def health_check():
+    return {
+        &quot;status&quot;: &quot;healthy&quot;,
+        &quot;service&quot;: &quot;AA007 Backend&quot;,
+    }
+
+
+@app.get(&quot;/leads&quot;, response_model=list[LeadRecord])
+def list_leads():
+    &quot;&quot;&quot;Return the seeded sample leads.&quot;&quot;&quot;
+    return get_seed_leads()
+
+
+@app.post(&quot;/workflow/run&quot;, response_model=WorkflowResponse)
+def run_lead_workflow(request: WorkflowRequest):
+    &quot;&quot;&quot;Execute all five agents and return the lead decision.&quot;&quot;&quot;
+    return workflow_service.run(request)</file><file path="backend/tests/test_health.py">from datetime import date, datetime, timedelta, timezone
+
+from fastapi.testclient import TestClient
+
+from app.main import app
+from app.data.seed_leads import get_seed_leads
+from app.models.schemas import (
+    ContactDetails,
+    EngagementEvent,
+    LeadRecord,
+    LeadStage,
+    PendingFollowUp,
+    WorkflowRequest,
+)
+from app.services.workflow_service import LeadWorkflowService
+
+
+client = TestClient(app)
+
+
+def test_root_endpoint():
+    response = client.get(&quot;/&quot;)
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data[&quot;status&quot;] == &quot;running&quot;
+    assert data[&quot;project&quot;] == (
+        &quot;AA007 - Lead Follow-up Prioritization Intelligence&quot;
+    )
+
+
+def test_health_endpoint():
+    response = client.get(&quot;/health&quot;)
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data[&quot;status&quot;] == &quot;healthy&quot;
+    assert data[&quot;service&quot;] == &quot;AA007 Backend&quot;
+
+
+def test_hot_seed_lead_follow_up_now():
+    lead = next(
+        item for item in get_seed_leads()
+        if item.lead_id == &quot;AA007-HOT-001&quot;
+    )
+
+    result = LeadWorkflowService().run(WorkflowRequest(lead=lead))
+
+    assert result.recommendation == &quot;FOLLOW_UP_NOW&quot;
+    assert &quot;AA007-RULE-02&quot; in result.triggered_rules
+
+
+def test_warm_seed_lead_follow_up_soon():
+    lead = next(
+        item for item in get_seed_leads()
+        if item.lead_id == &quot;AA007-WARM-001&quot;
+    )
+
+    result = LeadWorkflowService().run(WorkflowRequest(lead=lead))
+
+    assert result.recommendation == &quot;FOLLOW_UP_SOON&quot;
+    assert &quot;AA007-RULE-05&quot; in result.triggered_rules
+
+
+def test_stale_seed_lead_nurture():
+    lead = next(
+        item for item in get_seed_leads()
+        if item.lead_id == &quot;AA007-STALE-001&quot;
+    )
+
+    result = LeadWorkflowService().run(WorkflowRequest(lead=lead))
+
+    assert result.recommendation == &quot;NURTURE&quot;
+    assert &quot;AA007-RULE-04&quot; in result.triggered_rules
+
+
+def test_missing_mandatory_data_requests_data():
+    lead = LeadRecord(
+        lead_id=&quot;AA007-MISSING-001&quot;,
+        contact=None,
+        source=&quot;Website&quot;,
+        age_days=2,
+        last_contact_date=date.today(),
+        declared_fit=&quot;HIGH&quot;,
+        stage=LeadStage.NEW,
+    )
+
+    result = LeadWorkflowService().run(WorkflowRequest(lead=lead))
+
+    assert result.recommendation == &quot;REQUEST_DATA&quot;
+    assert &quot;AA007-RULE-01&quot; in result.triggered_rules
+
+
+def test_high_fit_recent_engagement_triggers_rule_03():
+    today = date.today()
+
+    lead = LeadRecord(
+        lead_id=&quot;AA007-HIGH-FIT-001&quot;,
+        contact=ContactDetails(
+            name=&quot;Test Lead&quot;,
+            email=&quot;test@example.com&quot;,
+        ),
+        source=&quot;Website&quot;,
+        age_days=2,
+        last_contact_date=today,
+        engagement_events=[
+            EngagementEvent(
+                event_type=&quot;EMAIL_REPLY&quot;,
+                occurred_at=today,
+                description=&quot;Recent positive engagement&quot;,
+            ),
+        ],
+        declared_need=&quot;Interested in a product demonstration&quot;,
+        declared_fit=&quot;HIGH&quot;,
+        stage=LeadStage.CONTACTED,
+        pending_follow_up=PendingFollowUp(
+            committed=False,
+        ),
+    )
+
+    result = LeadWorkflowService().run(WorkflowRequest(lead=lead))
+
+    assert result.recommendation == &quot;FOLLOW_UP_NOW&quot;
+    assert &quot;AA007-RULE-03&quot; in result.triggered_rules
+
+
+def test_workflow_executes_all_five_agents():
+    lead = get_seed_leads()[0]
+
+    result = LeadWorkflowService().run(WorkflowRequest(lead=lead))
+
+    expected_agents = {
+        &quot;Lead Intake Agent&quot;,
+        &quot;Recency Agent&quot;,
+        &quot;Engagement Agent&quot;,
+        &quot;Fit &amp; SLA Agent&quot;,
+        &quot;Lead Priority Decision Agent&quot;,
+    }
+
+    actual_agents = {
+        agent.agent_name for agent in result.agent_outputs
+    }
+
+    assert actual_agents == expected_agents
+    assert len(result.agent_outputs) == 5
+
+
+def test_workflow_generates_unique_audit_reference():
+    lead = get_seed_leads()[0]
+    service = LeadWorkflowService()
+
+    first = service.run(WorkflowRequest(lead=lead))
+    second = service.run(WorkflowRequest(lead=lead))
+
+    assert first.workflow_id != second.workflow_id
+    assert first.audit_reference == f&quot;AUDIT-{first.workflow_id}&quot;
+    assert second.audit_reference == f&quot;AUDIT-{second.workflow_id}&quot;
+
+
+def test_workflow_api_returns_complete_result():
+    response = client.post(
+        &quot;/workflow/run&quot;,
+        json={
+            &quot;lead&quot;: get_seed_leads()[0].model_dump(mode=&quot;json&quot;)
+        },
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data[&quot;recommendation&quot;] == &quot;FOLLOW_UP_NOW&quot;
+    assert len(data[&quot;agent_outputs&quot;]) == 5
+    assert len(data[&quot;evidence&quot;]) &gt; 0
+    assert data[&quot;audit_reference&quot;].startswith(&quot;AUDIT-&quot;)</file></files></repomix>
