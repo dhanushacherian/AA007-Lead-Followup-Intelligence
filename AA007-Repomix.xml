@@ -38,6 +38,7 @@ or other automated processes.</purpose><file_format>The content is organized as 
       schemas.py
     services/
       __init__.py
+      audit_service.py
       context_builder.py
       workflow_context.py
       workflow_service.py
@@ -70,7 +71,72 @@ frontend/
   tsconfig.json
   tsconfig.node.json
   vite.config.ts
-.gitignore</directory_structure><files>This section contains the contents of the repository&apos;s files.<file path="backend/app/agents/__init__.py"></file><file path="backend/app/agents/common.py">from app.models.schemas import AgentResult
+.gitignore</directory_structure><files>This section contains the contents of the repository&apos;s files.<file path="backend/app/services/audit_service.py">from copy import deepcopy
+from datetime import datetime, timezone
+from threading import RLock
+from typing import Any
+
+from app.models.schemas import AgentResult
+
+
+class AuditService:
+    &quot;&quot;&quot;Store and retrieve workflow audit records in memory.&quot;&quot;&quot;
+
+    def __init__(self):
+        self._records: dict[str, dict[str, Any]] = {}
+        self._lock = RLock()
+
+    def record_workflow(
+        self,
+        workflow_id: str,
+        lead_id: str,
+        agent_outputs: list[AgentResult],
+        triggered_rules: list[str],
+        recommendation: str,
+        errors: list[str],
+    ) -&gt; str:
+        &quot;&quot;&quot;Save a completed workflow and return its audit reference.&quot;&quot;&quot;
+
+        audit_reference = f&quot;AUDIT-{workflow_id}&quot;
+
+        record = {
+            &quot;audit_reference&quot;: audit_reference,
+            &quot;workflow_id&quot;: workflow_id,
+            &quot;lead_id&quot;: lead_id,
+            &quot;execution_timestamp&quot;: datetime.now(timezone.utc).isoformat(),
+            &quot;agent_execution_sequence&quot;: [
+                agent.agent_name for agent in agent_outputs
+            ],
+            &quot;agent_outputs&quot;: [
+                agent.model_dump(mode=&quot;json&quot;)
+                for agent in agent_outputs
+            ],
+            &quot;triggered_rules&quot;: list(triggered_rules),
+            &quot;final_recommendation&quot;: recommendation,
+            &quot;errors&quot;: list(errors),
+        }
+
+        with self._lock:
+            self._records[audit_reference] = record
+
+        return audit_reference
+
+    def get_audit_record(
+        self,
+        audit_reference: str,
+    ) -&gt; dict[str, Any] | None:
+        &quot;&quot;&quot;Retrieve a stored audit record by its reference.&quot;&quot;&quot;
+
+        with self._lock:
+            record = self._records.get(audit_reference)
+
+            if record is None:
+                return None
+
+            return deepcopy(record)
+
+
+audit_service = AuditService()</file><file path="backend/app/agents/__init__.py"></file><file path="backend/app/agents/common.py">from app.models.schemas import AgentResult
 from app.services.workflow_context import WorkflowContext
 
 
@@ -645,6 +711,7 @@ from app.agents.decision_agent import LeadPriorityDecisionAgent
 
 from app.models.schemas import WorkflowRequest, WorkflowResponse
 from app.services.context_builder import ContextBuilder
+from app.services.audit_service import audit_service
 
 
 class LeadWorkflowService:
@@ -662,6 +729,7 @@ class LeadWorkflowService:
     def run(self, request: WorkflowRequest) -&gt; WorkflowResponse:
         context = ContextBuilder.build(request.lead)
 
+        # Execute all five agents in sequence.
         for agent in self.agents:
             agent.run(context)
 
@@ -669,17 +737,29 @@ class LeadWorkflowService:
         details = decision.details
 
         recommendation = details.get(&quot;recommendation&quot;) or &quot;REQUEST_DATA&quot;
+        reasons = details.get(&quot;reasons&quot;, [])
+        triggered_rules = details.get(&quot;triggered_rules&quot;, [])
+
+        # Save the actual workflow audit record.
+        audit_reference = audit_service.record_workflow(
+            workflow_id=context.workflow_id,
+            lead_id=context.lead.lead_id,
+            agent_outputs=context.agent_results,
+            triggered_rules=triggered_rules,
+            recommendation=recommendation,
+            errors=context.errors,
+        )
 
         return WorkflowResponse(
             workflow_id=context.workflow_id,
             lead_id=context.lead.lead_id,
             recommendation=recommendation,
             priority_score=decision.score,
-            reasons=details.get(&quot;reasons&quot;, []),
-            triggered_rules=details.get(&quot;triggered_rules&quot;, []),
+            reasons=reasons,
+            triggered_rules=triggered_rules,
             agent_outputs=context.agent_results,
             evidence=context.evidence,
-            audit_reference=f&quot;AUDIT-{context.workflow_id}&quot;,
+            audit_reference=audit_reference,
             errors=context.errors,
         )</file><file path="backend/app/__init__.py"></file><file path="backend/tests/__init__.py"></file><file path="backend/requirements.txt">annotated-doc==0.0.5
 annotated-types==0.8.0
@@ -2378,7 +2458,7 @@ Thumbs.db
 
 # Temporary files
 *.tmp
-*.bak</file><file path="backend/app/main.py">from fastapi import FastAPI
+*.bak</file><file path="backend/app/main.py">from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.data.seed_leads import get_seed_leads
@@ -2388,6 +2468,7 @@ from app.models.schemas import (
     WorkflowResponse,
 )
 from app.services.workflow_service import LeadWorkflowService
+from app.services.audit_service import audit_service
 
 
 app = FastAPI(
@@ -2433,7 +2514,21 @@ def list_leads():
 @app.post(&quot;/workflow/run&quot;, response_model=WorkflowResponse)
 def run_lead_workflow(request: WorkflowRequest):
     &quot;&quot;&quot;Execute all five agents and return the lead decision.&quot;&quot;&quot;
-    return workflow_service.run(request)</file><file path="backend/tests/test_health.py">from datetime import date, datetime, timedelta, timezone
+    return workflow_service.run(request)
+
+
+@app.get(&quot;/audit/{audit_reference}&quot;)
+def get_audit_record(audit_reference: str):
+    &quot;&quot;&quot;Retrieve an actual stored workflow audit record.&quot;&quot;&quot;
+    record = audit_service.get_audit_record(audit_reference)
+
+    if record is None:
+        raise HTTPException(
+            status_code=404,
+            detail=&quot;Audit record not found.&quot;,
+        )
+
+    return record</file><file path="backend/tests/test_health.py">from datetime import date, datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
 
@@ -2611,4 +2706,67 @@ def test_workflow_api_returns_complete_result():
     assert data[&quot;recommendation&quot;] == &quot;FOLLOW_UP_NOW&quot;
     assert len(data[&quot;agent_outputs&quot;]) == 5
     assert len(data[&quot;evidence&quot;]) &gt; 0
-    assert data[&quot;audit_reference&quot;].startswith(&quot;AUDIT-&quot;)</file></files></repomix>
+    assert data[&quot;audit_reference&quot;].startswith(&quot;AUDIT-&quot;)
+
+
+def test_workflow_audit_record_is_retrievable():
+    response = client.post(
+        &quot;/workflow/run&quot;,
+        json={
+            &quot;lead&quot;: get_seed_leads()[0].model_dump(mode=&quot;json&quot;)
+        },
+    )
+
+    assert response.status_code == 200
+
+    workflow_data = response.json()
+    audit_reference = workflow_data[&quot;audit_reference&quot;]
+
+    audit_response = client.get(f&quot;/audit/{audit_reference}&quot;)
+
+    assert audit_response.status_code == 200
+
+    audit_data = audit_response.json()
+
+    assert audit_data[&quot;audit_reference&quot;] == audit_reference
+    assert audit_data[&quot;workflow_id&quot;] == workflow_data[&quot;workflow_id&quot;]
+    assert audit_data[&quot;lead_id&quot;] == workflow_data[&quot;lead_id&quot;]
+    assert audit_data[&quot;final_recommendation&quot;] == workflow_data[&quot;recommendation&quot;]
+    assert len(audit_data[&quot;agent_execution_sequence&quot;]) == 5
+    assert len(audit_data[&quot;agent_outputs&quot;]) == 5
+    assert isinstance(audit_data[&quot;execution_timestamp&quot;], str)
+    assert isinstance(audit_data[&quot;triggered_rules&quot;], list)
+    assert isinstance(audit_data[&quot;errors&quot;], list)
+
+
+def test_audit_record_contains_all_five_agents_in_order():
+    response = client.post(
+        &quot;/workflow/run&quot;,
+        json={
+            &quot;lead&quot;: get_seed_leads()[0].model_dump(mode=&quot;json&quot;)
+        },
+    )
+
+    audit_reference = response.json()[&quot;audit_reference&quot;]
+    audit_response = client.get(f&quot;/audit/{audit_reference}&quot;)
+
+    assert audit_response.status_code == 200
+
+    audit_data = audit_response.json()
+
+    expected_sequence = [
+        &quot;Lead Intake Agent&quot;,
+        &quot;Recency Agent&quot;,
+        &quot;Engagement Agent&quot;,
+        &quot;Fit &amp; SLA Agent&quot;,
+        &quot;Lead Priority Decision Agent&quot;,
+    ]
+
+    assert audit_data[&quot;agent_execution_sequence&quot;] == expected_sequence
+
+
+def test_unknown_audit_reference_returns_404():
+    response = client.get(&quot;/audit/AUDIT-NOT-FOUND&quot;)
+
+    assert response.status_code == 404
+    assert response.json()[&quot;detail&quot;] == &quot;Audit record not found.&quot;</file></files></repomix>
