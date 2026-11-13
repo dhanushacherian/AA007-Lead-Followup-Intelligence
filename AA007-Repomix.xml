@@ -1,25 +1,46 @@
-<repomix><file_summary>This file is a merged representation of a subset of the codebase, containing files not matching ignore patterns, combined into a single document by Repomix.
-The content has been processed where content has been formatted for parsing in xml style.<purpose>This file contains a packed representation of a subset of the repository&apos;s contents that is considered the most important context.
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
 It is designed to be easily consumable by AI systems for analysis, code review,
-or other automated processes.</purpose><file_format>The content is organized as follows:
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
 1. This summary section
 2. Repository information
 3. Directory structure
 4. Repository files (if enabled)
-5. Repository files, each consisting of:
+5. Multiple file entries, each consisting of:
   - File path as an attribute
-  - Full contents of the file</file_format><usage_guidelines>- This file should be treated as read-only. Any changes should be made to the
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
   original repository files, not this packed version.
 - When processing this file, use the file path to distinguish
   between different files in the repository.
 - Be aware that this file may contain sensitive information. Handle it with
-  the same level of security as you would the original repository.</usage_guidelines><notes>- Some files may have been excluded based on .gitignore rules and Repomix&apos;s configuration
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
 - Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
-- Files matching these patterns are excluded: backend/.venv/**, frontend/node_modules/**, frontend/dist/**, .git/**, **/__pycache__/**, **/.pytest_cache/**, *.log, AA007-Repomix.xml
 - Files matching patterns in .gitignore are excluded
 - Files matching default ignore patterns are excluded
-- Content has been formatted for parsing in xml style
-- Files are sorted by Git change count (files with more changes are at the bottom)</notes></file_summary><directory_structure>backend/
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+backend/
   app/
     agents/
       __init__.py
@@ -71,33 +92,49 @@ frontend/
   tsconfig.json
   tsconfig.node.json
   vite.config.ts
-.gitignore</directory_structure><files>This section contains the contents of the repository&apos;s files.<file path="backend/app/agents/__init__.py"></file><file path="backend/app/agents/common.py">from app.models.schemas import AgentResult
+.gitignore
+README.md
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="backend/app/agents/__init__.py">
+
+</file>
+
+<file path="backend/app/agents/common.py">
+from app.models.schemas import AgentResult
 from app.services.workflow_context import WorkflowContext
 
 
 def record_result(
     context: WorkflowContext,
     result: AgentResult,
-) -&gt; AgentResult:
+) -> AgentResult:
     context.agent_results.append(result)
     context.evidence.extend(result.evidence)
-    return result</file><file path="backend/app/agents/decision_agent.py">from app.models.schemas import AgentResult
+    return result
+</file>
+
+<file path="backend/app/agents/decision_agent.py">
+from app.models.schemas import AgentResult
 from app.services.workflow_context import WorkflowContext
 from app.agents.common import record_result
 
 
 class LeadPriorityDecisionAgent:
 
-    name = &quot;Lead Priority Decision Agent&quot;
+    name = "Lead Priority Decision Agent"
 
     REQUIRED_AGENTS = {
-        &quot;Lead Intake Agent&quot;,
-        &quot;Recency Agent&quot;,
-        &quot;Engagement Agent&quot;,
-        &quot;Fit &amp; SLA Agent&quot;,
+        "Lead Intake Agent",
+        "Recency Agent",
+        "Engagement Agent",
+        "Fit & SLA Agent",
     }
 
-    def run(self, context: WorkflowContext) -&gt; AgentResult:
+    def run(self, context: WorkflowContext) -> AgentResult:
 
         results = {
             item.agent_name: item
@@ -110,128 +147,132 @@ class LeadPriorityDecisionAgent:
         if not self.REQUIRED_AGENTS.issubset(completed):
             result = AgentResult(
                 agent_name=self.name,
-                status=&quot;INCOMPLETE&quot;,
-                summary=&quot;Required agent results are missing.&quot;,
+                status="INCOMPLETE",
+                summary="Required agent results are missing.",
                 evidence=[
-                    f&quot;Completed agents: {len(self.REQUIRED_AGENTS.intersection(completed))} of 4.&quot;
+                    f"Completed agents: {len(self.REQUIRED_AGENTS.intersection(completed))} of 4."
                 ],
                 details={
-                    &quot;recommendation&quot;: None,
-                    &quot;triggered_rules&quot;: [],
+                    "recommendation": None,
+                    "triggered_rules": [],
                 },
             )
             return record_result(context, result)
 
-        intake = results[&quot;Lead Intake Agent&quot;]
-        recency = results[&quot;Recency Agent&quot;]
-        engagement = results[&quot;Engagement Agent&quot;]
-        fit_sla = results[&quot;Fit &amp; SLA Agent&quot;]
+        intake = results["Lead Intake Agent"]
+        recency = results["Recency Agent"]
+        engagement = results["Engagement Agent"]
+        fit_sla = results["Fit & SLA Agent"]
 
         recommendation = None
         triggered_rules = []
         reasons = []
 
         # Rule 1: Missing mandatory lead information.
-        issues = intake.details.get(&quot;issues&quot;, [])
+        issues = intake.details.get("issues", [])
 
-        if intake.status != &quot;PASS&quot; or issues:
-            recommendation = &quot;REQUEST_DATA&quot;
-            triggered_rules.append(&quot;AA007-RULE-01&quot;)
+        if intake.status != "PASS" or issues:
+            recommendation = "REQUEST_DATA"
+            triggered_rules.append("AA007-RULE-01")
             reasons.extend(
-                issues or [&quot;Lead intake validation did not pass.&quot;]
+                issues or ["Lead intake validation did not pass."]
             )
 
         # Rule 2: A committed follow-up is overdue.
-        elif fit_sla.details.get(&quot;overdue&quot;) is True:
-            recommendation = &quot;FOLLOW_UP_NOW&quot;
-            triggered_rules.append(&quot;AA007-RULE-02&quot;)
+        elif fit_sla.details.get("overdue") is True:
+            recommendation = "FOLLOW_UP_NOW"
+            triggered_rules.append("AA007-RULE-02")
             reasons.append(
-                &quot;A committed follow-up is overdue.&quot;
+                "A committed follow-up is overdue."
             )
 
         # Rule 3: High fit, recent contact and recorded engagement.
         elif (
-            fit_sla.details.get(&quot;declared_fit&quot;) == &quot;HIGH&quot;
-            and recency.status == &quot;RECENT&quot;
-            and engagement.status in {&quot;HIGH&quot;, &quot;MODERATE&quot;}
+            fit_sla.details.get("declared_fit") == "HIGH"
+            and recency.status == "RECENT"
+            and engagement.status in {"HIGH", "MODERATE"}
         ):
-            recommendation = &quot;FOLLOW_UP_NOW&quot;
-            triggered_rules.append(&quot;AA007-RULE-03&quot;)
+            recommendation = "FOLLOW_UP_NOW"
+            triggered_rules.append("AA007-RULE-03")
             reasons.extend([
-                &quot;Declared fit is HIGH.&quot;,
-                &quot;Lead contact is recent.&quot;,
-                &quot;Engagement activity is recorded.&quot;,
+                "Declared fit is HIGH.",
+                "Lead contact is recent.",
+                "Engagement activity is recorded.",
             ])
 
         # Rule 4: Stale contact and no engagement.
         elif (
-            recency.status == &quot;STALE&quot;
-            and engagement.status == &quot;LOW&quot;
+            recency.status == "STALE"
+            and engagement.status == "LOW"
         ):
-            recommendation = &quot;NURTURE&quot;
-            triggered_rules.append(&quot;AA007-RULE-04&quot;)
+            recommendation = "NURTURE"
+            triggered_rules.append("AA007-RULE-04")
             reasons.extend([
-                &quot;Lead contact is stale.&quot;,
-                &quot;No engagement events are recorded.&quot;,
+                "Lead contact is stale.",
+                "No engagement events are recorded.",
             ])
 
         # Rule 5: Default deterministic outcome.
         else:
-            recommendation = &quot;FOLLOW_UP_SOON&quot;
-            triggered_rules.append(&quot;AA007-RULE-05&quot;)
+            recommendation = "FOLLOW_UP_SOON"
+            triggered_rules.append("AA007-RULE-05")
             reasons.append(
-                &quot;No immediate-follow-up or nurture rule was triggered.&quot;
+                "No immediate-follow-up or nurture rule was triggered."
             )
 
         evidence = [
-            f&quot;Recommendation: {recommendation}&quot;,
+            f"Recommendation: {recommendation}",
             *reasons,
-            f&quot;Rules triggered: {&apos;, &apos;.join(triggered_rules)}&quot;,
+            f"Rules triggered: {', '.join(triggered_rules)}",
         ]
 
         result = AgentResult(
             agent_name=self.name,
-            status=&quot;DECIDED&quot;,
-            summary=f&quot;Recommendation: {recommendation}&quot;,
+            status="DECIDED",
+            summary=f"Recommendation: {recommendation}",
             evidence=evidence,
             details={
-                &quot;recommendation&quot;: recommendation,
-                &quot;triggered_rules&quot;: triggered_rules,
-                &quot;reasons&quot;: reasons,
-                &quot;agents_considered&quot;: sorted(self.REQUIRED_AGENTS),
+                "recommendation": recommendation,
+                "triggered_rules": triggered_rules,
+                "reasons": reasons,
+                "agents_considered": sorted(self.REQUIRED_AGENTS),
             },
         )
 
-        return record_result(context, result)</file><file path="backend/app/agents/engagement_agent.py">from app.models.schemas import AgentResult
+        return record_result(context, result)
+</file>
+
+<file path="backend/app/agents/engagement_agent.py">
+from app.models.schemas import AgentResult
 from app.services.workflow_context import WorkflowContext
 from app.agents.common import record_result
 
 
 class EngagementAgent:
 
-    name = &quot;Engagement Agent&quot;
+    name = "Engagement Agent"
 
-    def run(self, context: WorkflowContext) -&gt; AgentResult:
+    def run(self, context: WorkflowContext) -> AgentResult:
         events = context.lead.engagement_events
 
         event_types = [event.event_type.upper() for event in events]
 
         if not events:
-            status = &quot;LOW&quot;
-            summary = &quot;No engagement events are recorded.&quot;
-        elif len(events) &gt;= 2:
-            status = &quot;HIGH&quot;
-            summary = &quot;Multiple engagement events are recorded.&quot;
+            status = "LOW"
+            summary = "No engagement events are recorded."
+        elif len(events) >= 2:
+            status = "HIGH"
+            summary = "Multiple engagement events are recorded."
         else:
-            status = &quot;MODERATE&quot;
-            summary = &quot;One engagement event is recorded.&quot;
+            status = "MODERATE"
+            summary = "One engagement event is recorded."
 
         evidence = [
-            f&quot;Recorded engagement events: {len(events)}.&quot;
+            f"Recorded engagement events: {len(events)}."
         ]
 
         evidence.extend(
-            f&quot;Engagement event: {event_type}&quot;
+            f"Engagement event: {event_type}"
             for event_type in event_types
         )
 
@@ -241,12 +282,16 @@ class EngagementAgent:
             summary=summary,
             evidence=evidence,
             details={
-                &quot;event_count&quot;: len(events),
-                &quot;event_types&quot;: event_types,
+                "event_count": len(events),
+                "event_types": event_types,
             },
         )
 
-        return record_result(context, result)</file><file path="backend/app/agents/fit_sla_agent.py">from datetime import datetime, timezone
+        return record_result(context, result)
+</file>
+
+<file path="backend/app/agents/fit_sla_agent.py">
+from datetime import datetime, timezone
 
 from app.models.schemas import AgentResult
 from app.services.workflow_context import WorkflowContext
@@ -255,21 +300,21 @@ from app.agents.common import record_result
 
 class FitSlaAgent:
 
-    name = &quot;Fit &amp; SLA Agent&quot;
+    name = "Fit & SLA Agent"
 
-    def run(self, context: WorkflowContext) -&gt; AgentResult:
+    def run(self, context: WorkflowContext) -> AgentResult:
         lead = context.lead
-        fit = (lead.declared_fit or &quot;&quot;).upper()
+        fit = (lead.declared_fit or "").upper()
         follow_up = lead.pending_follow_up
 
         evidence = [
-            f&quot;Declared fit: {fit or &apos;NOT PROVIDED&apos;}.&quot;,
-            f&quot;Follow-up committed: {follow_up.committed}.&quot;,
+            f"Declared fit: {fit or 'NOT PROVIDED'}.",
+            f"Follow-up committed: {follow_up.committed}.",
         ]
 
         if follow_up.due_at is None:
             overdue = False
-            evidence.append(&quot;No follow-up due date is available.&quot;)
+            evidence.append("No follow-up due date is available.")
         else:
             due_at = follow_up.due_at
 
@@ -278,79 +323,87 @@ class FitSlaAgent:
 
             overdue = (
                 follow_up.committed
-                and due_at &lt; datetime.now(timezone.utc)
+                and due_at < datetime.now(timezone.utc)
             )
 
             evidence.append(
-                f&quot;Follow-up due date: {due_at.isoformat()}.&quot;
+                f"Follow-up due date: {due_at.isoformat()}."
             )
 
         if overdue:
-            sla_status = &quot;OVERDUE&quot;
+            sla_status = "OVERDUE"
         elif follow_up.committed:
-            sla_status = &quot;COMMITTED&quot;
+            sla_status = "COMMITTED"
         else:
-            sla_status = &quot;NO_COMMITMENT&quot;
+            sla_status = "NO_COMMITMENT"
 
         result = AgentResult(
             agent_name=self.name,
-            status=&quot;PASS&quot;,
-            summary=&quot;Lead fit and follow-up commitment evaluated.&quot;,
+            status="PASS",
+            summary="Lead fit and follow-up commitment evaluated.",
             evidence=evidence,
             details={
-                &quot;declared_fit&quot;: fit or None,
-                &quot;sla_status&quot;: sla_status,
-                &quot;overdue&quot;: overdue,
+                "declared_fit": fit or None,
+                "sla_status": sla_status,
+                "overdue": overdue,
             },
         )
 
-        return record_result(context, result)</file><file path="backend/app/agents/lead_intake_agent.py">from app.models.schemas import AgentResult
+        return record_result(context, result)
+</file>
+
+<file path="backend/app/agents/lead_intake_agent.py">
+from app.models.schemas import AgentResult
 from app.services.workflow_context import WorkflowContext
 from app.agents.common import record_result
 
 
 class LeadIntakeAgent:
 
-    name = &quot;Lead Intake Agent&quot;
+    name = "Lead Intake Agent"
 
-    def run(self, context: WorkflowContext) -&gt; AgentResult:
+    def run(self, context: WorkflowContext) -> AgentResult:
         lead = context.lead
         issues = []
 
         if lead.contact is None:
-            issues.append(&quot;Contact details are missing.&quot;)
+            issues.append("Contact details are missing.")
         elif not lead.contact.name and not lead.contact.email and not lead.contact.phone:
-            issues.append(&quot;At least one contact identifier is required.&quot;)
+            issues.append("At least one contact identifier is required.")
 
         if lead.stage is None:
-            issues.append(&quot;Lead stage is missing.&quot;)
+            issues.append("Lead stage is missing.")
 
         if not lead.source:
-            issues.append(&quot;Lead source is missing.&quot;)
+            issues.append("Lead source is missing.")
 
         if issues:
             result = AgentResult(
                 agent_name=self.name,
-                status=&quot;NEEDS_DATA&quot;,
-                summary=&quot;Required lead information is incomplete.&quot;,
+                status="NEEDS_DATA",
+                summary="Required lead information is incomplete.",
                 evidence=issues,
-                details={&quot;issues&quot;: issues},
+                details={"issues": issues},
             )
         else:
             evidence = [
-                f&quot;Lead ID: {lead.lead_id}&quot;,
-                f&quot;Lead stage: {lead.stage.value}&quot;,
-                f&quot;Lead source: {lead.source}&quot;,
+                f"Lead ID: {lead.lead_id}",
+                f"Lead stage: {lead.stage.value}",
+                f"Lead source: {lead.source}",
             ]
             result = AgentResult(
                 agent_name=self.name,
-                status=&quot;PASS&quot;,
-                summary=&quot;Lead intake validation passed.&quot;,
+                status="PASS",
+                summary="Lead intake validation passed.",
                 evidence=evidence,
-                details={&quot;lead_id&quot;: lead.lead_id},
+                details={"lead_id": lead.lead_id},
             )
 
-        return record_result(context, result)</file><file path="backend/app/agents/recency_agent.py">from datetime import date
+        return record_result(context, result)
+</file>
+
+<file path="backend/app/agents/recency_agent.py">
+from datetime import date
 
 from app.models.schemas import AgentResult
 from app.services.workflow_context import WorkflowContext
@@ -359,35 +412,35 @@ from app.agents.common import record_result
 
 class RecencyAgent:
 
-    name = &quot;Recency Agent&quot;
+    name = "Recency Agent"
 
-    def run(self, context: WorkflowContext) -&gt; AgentResult:
+    def run(self, context: WorkflowContext) -> AgentResult:
         lead = context.lead
         today = date.today()
 
-        evidence = [f&quot;Lead age: {lead.age_days} days.&quot;]
+        evidence = [f"Lead age: {lead.age_days} days."]
 
         if lead.last_contact_date is None:
-            evidence.append(&quot;Last contact date is unavailable.&quot;)
-            status = &quot;MISSING_DATA&quot;
-            summary = &quot;Cannot evaluate last-contact recency.&quot;
+            evidence.append("Last contact date is unavailable.")
+            status = "MISSING_DATA"
+            summary = "Cannot evaluate last-contact recency."
             recency_days = None
         else:
             recency_days = (today - lead.last_contact_date).days
-            evidence.append(f&quot;Days since last contact: {recency_days}.&quot;)
+            evidence.append(f"Days since last contact: {recency_days}.")
 
-            if recency_days &lt; 0:
-                status = &quot;INVALID_DATA&quot;
-                summary = &quot;Last contact date is in the future.&quot;
-            elif recency_days &lt;= 3:
-                status = &quot;RECENT&quot;
-                summary = &quot;Lead was contacted recently.&quot;
-            elif recency_days &lt;= 14:
-                status = &quot;MODERATE&quot;
-                summary = &quot;Lead contact is moderately recent.&quot;
+            if recency_days < 0:
+                status = "INVALID_DATA"
+                summary = "Last contact date is in the future."
+            elif recency_days <= 3:
+                status = "RECENT"
+                summary = "Lead was contacted recently."
+            elif recency_days <= 14:
+                status = "MODERATE"
+                summary = "Lead contact is moderately recent."
             else:
-                status = &quot;STALE&quot;
-                summary = &quot;Lead has not been contacted recently.&quot;
+                status = "STALE"
+                summary = "Lead has not been contacted recently."
 
         result = AgentResult(
             agent_name=self.name,
@@ -395,11 +448,19 @@ class RecencyAgent:
             summary=summary,
             evidence=evidence,
             details={
-                &quot;lead_age_days&quot;: lead.age_days,
-                &quot;days_since_last_contact&quot;: recency_days,
+                "lead_age_days": lead.age_days,
+                "days_since_last_contact": recency_days,
             },
         )
-        return record_result(context, result)</file><file path="backend/app/core/__init__.py"></file><file path="backend/app/data/seed_leads.py">from datetime import date, datetime, timedelta, timezone
+        return record_result(context, result)
+</file>
+
+<file path="backend/app/core/__init__.py">
+
+</file>
+
+<file path="backend/app/data/seed_leads.py">
+from datetime import date, datetime, timedelta, timezone
 
 from app.models.schemas import (
     ContactDetails,
@@ -415,92 +476,100 @@ now = datetime.now(timezone.utc)
 
 SAMPLE_LEADS: list[LeadRecord] = [
     LeadRecord(
-        lead_id=&quot;AA007-HOT-001&quot;,
+        lead_id="AA007-HOT-001",
         contact=ContactDetails(
-            name=&quot;Aarav Thomas&quot;,
-            email=&quot;aarav@example.com&quot;,
-            phone=&quot;+91-9000000001&quot;,
+            name="Aarav Thomas",
+            email="aarav@example.com",
+            phone="+91-9000000001",
         ),
-        source=&quot;Website&quot;,
+        source="Website",
         age_days=1,
         last_contact_date=today,
         engagement_events=[
             EngagementEvent(
-                event_type=&quot;INQUIRY&quot;,
+                event_type="INQUIRY",
                 occurred_at=today,
-                description=&quot;Submitted a recent product inquiry&quot;,
+                description="Submitted a recent product inquiry",
             ),
             EngagementEvent(
-                event_type=&quot;CALL_REQUEST&quot;,
+                event_type="CALL_REQUEST",
                 occurred_at=today,
-                description=&quot;Requested a sales call&quot;,
+                description="Requested a sales call",
             ),
         ],
-        declared_need=&quot;Needs a product demonstration&quot;,
-        declared_fit=&quot;HIGH&quot;,
+        declared_need="Needs a product demonstration",
+        declared_fit="HIGH",
         stage=LeadStage.NEW,
         pending_follow_up=PendingFollowUp(
             committed=True,
             due_at=now - timedelta(hours=2),
-            description=&quot;Committed callback is overdue&quot;,
+            description="Committed callback is overdue",
         ),
     ),
     LeadRecord(
-        lead_id=&quot;AA007-WARM-001&quot;,
+        lead_id="AA007-WARM-001",
         contact=ContactDetails(
-            name=&quot;Meera Joseph&quot;,
-            email=&quot;meera@example.com&quot;,
+            name="Meera Joseph",
+            email="meera@example.com",
         ),
-        source=&quot;Referral&quot;,
+        source="Referral",
         age_days=5,
         last_contact_date=today - timedelta(days=2),
         engagement_events=[
             EngagementEvent(
-                event_type=&quot;EMAIL_REPLY&quot;,
+                event_type="EMAIL_REPLY",
                 occurred_at=today - timedelta(days=2),
-                description=&quot;Replied to a sales email&quot;,
+                description="Replied to a sales email",
             ),
         ],
-        declared_need=&quot;Evaluating available options&quot;,
-        declared_fit=&quot;MEDIUM&quot;,
+        declared_need="Evaluating available options",
+        declared_fit="MEDIUM",
         stage=LeadStage.CONTACTED,
         pending_follow_up=PendingFollowUp(
             committed=False,
-            description=&quot;No committed follow-up deadline&quot;,
+            description="No committed follow-up deadline",
         ),
     ),
     LeadRecord(
-        lead_id=&quot;AA007-STALE-001&quot;,
+        lead_id="AA007-STALE-001",
         contact=ContactDetails(
-            name=&quot;Rohan Mathew&quot;,
-            email=&quot;rohan@example.com&quot;,
+            name="Rohan Mathew",
+            email="rohan@example.com",
         ),
-        source=&quot;Event&quot;,
+        source="Event",
         age_days=45,
         last_contact_date=today - timedelta(days=40),
         engagement_events=[],
-        declared_need=&quot;No recent need update&quot;,
-        declared_fit=&quot;LOW&quot;,
+        declared_need="No recent need update",
+        declared_fit="LOW",
         stage=LeadStage.NEW,
         pending_follow_up=PendingFollowUp(
             committed=False,
-            description=&quot;No pending committed follow-up&quot;,
+            description="No pending committed follow-up",
         ),
     ),
 ]
 
 
-def get_seed_leads() -&gt; list[LeadRecord]:
-    &quot;&quot;&quot;Return fresh model instances for the demo dataset.&quot;&quot;&quot;
+def get_seed_leads() -> list[LeadRecord]:
+    """Return fresh model instances for the demo dataset."""
     return [lead.model_copy(deep=True) for lead in SAMPLE_LEADS]
 
 
-def get_seed_lead(lead_id: str) -&gt; LeadRecord | None:
-    &quot;&quot;&quot;Find one demo lead by its ID.&quot;&quot;&quot;
+def get_seed_lead(lead_id: str) -> LeadRecord | None:
+    """Find one demo lead by its ID."""
     for lead in get_seed_leads():
         if lead.lead_id == lead_id:
             return lead
-    return None</file><file path="backend/app/models/__init__.py"></file><file path="backend/app/models/schemas.py">from datetime import date, datetime
+    return None
+</file>
+
+<file path="backend/app/models/__init__.py">
+
+</file>
+
+<file path="backend/app/models/schemas.py">
+from datetime import date, datetime
 from enum import Enum
 from typing import Any
 
@@ -508,13 +577,13 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class LeadStage(str, Enum):
-    NEW = &quot;NEW&quot;
-    CONTACTED = &quot;CONTACTED&quot;
-    QUALIFIED = &quot;QUALIFIED&quot;
-    PROPOSAL = &quot;PROPOSAL&quot;
-    NEGOTIATION = &quot;NEGOTIATION&quot;
-    WON = &quot;WON&quot;
-    LOST = &quot;LOST&quot;
+    NEW = "NEW"
+    CONTACTED = "CONTACTED"
+    QUALIFIED = "QUALIFIED"
+    PROPOSAL = "PROPOSAL"
+    NEGOTIATION = "NEGOTIATION"
+    WON = "WON"
+    LOST = "LOST"
 
 
 class ContactDetails(BaseModel):
@@ -579,7 +648,15 @@ class WorkflowResponse(BaseModel):
     agent_outputs: list[AgentResult] = Field(default_factory=list)
     evidence: list[str] = Field(default_factory=list)
     audit_reference: str
-    errors: list[str] = Field(default_factory=list)</file><file path="backend/app/services/__init__.py"></file><file path="backend/app/services/audit_service.py">from copy import deepcopy
+    errors: list[str] = Field(default_factory=list)
+</file>
+
+<file path="backend/app/services/__init__.py">
+
+</file>
+
+<file path="backend/app/services/audit_service.py">
+from copy import deepcopy
 from datetime import datetime, timezone
 from threading import RLock
 from typing import Any
@@ -588,7 +665,7 @@ from app.models.schemas import AgentResult
 
 
 class AuditService:
-    &quot;&quot;&quot;Store and retrieve workflow audit records in memory.&quot;&quot;&quot;
+    """Store and retrieve workflow audit records in memory."""
 
     def __init__(self):
         self._records: dict[str, dict[str, Any]] = {}
@@ -602,26 +679,26 @@ class AuditService:
         triggered_rules: list[str],
         recommendation: str,
         errors: list[str],
-    ) -&gt; str:
-        &quot;&quot;&quot;Save a completed workflow and return its audit reference.&quot;&quot;&quot;
+    ) -> str:
+        """Save a completed workflow and return its audit reference."""
 
-        audit_reference = f&quot;AUDIT-{workflow_id}&quot;
+        audit_reference = f"AUDIT-{workflow_id}"
 
         record = {
-            &quot;audit_reference&quot;: audit_reference,
-            &quot;workflow_id&quot;: workflow_id,
-            &quot;lead_id&quot;: lead_id,
-            &quot;execution_timestamp&quot;: datetime.now(timezone.utc).isoformat(),
-            &quot;agent_execution_sequence&quot;: [
+            "audit_reference": audit_reference,
+            "workflow_id": workflow_id,
+            "lead_id": lead_id,
+            "execution_timestamp": datetime.now(timezone.utc).isoformat(),
+            "agent_execution_sequence": [
                 agent.agent_name for agent in agent_outputs
             ],
-            &quot;agent_outputs&quot;: [
-                agent.model_dump(mode=&quot;json&quot;)
+            "agent_outputs": [
+                agent.model_dump(mode="json")
                 for agent in agent_outputs
             ],
-            &quot;triggered_rules&quot;: list(triggered_rules),
-            &quot;final_recommendation&quot;: recommendation,
-            &quot;errors&quot;: list(errors),
+            "triggered_rules": list(triggered_rules),
+            "final_recommendation": recommendation,
+            "errors": list(errors),
         }
 
         with self._lock:
@@ -632,8 +709,8 @@ class AuditService:
     def get_audit_record(
         self,
         audit_reference: str,
-    ) -&gt; dict[str, Any] | None:
-        &quot;&quot;&quot;Retrieve a stored audit record by its reference.&quot;&quot;&quot;
+    ) -> dict[str, Any] | None:
+        """Retrieve a stored audit record by its reference."""
 
         with self._lock:
             record = self._records.get(audit_reference)
@@ -644,16 +721,24 @@ class AuditService:
             return deepcopy(record)
 
 
-audit_service = AuditService()</file><file path="backend/app/services/context_builder.py">from app.models.schemas import LeadRecord
+audit_service = AuditService()
+</file>
+
+<file path="backend/app/services/context_builder.py">
+from app.models.schemas import LeadRecord
 from app.services.workflow_context import WorkflowContext, build_workflow_context
 
 
 class ContextBuilder:
-    &quot;&quot;&quot;Prepare validated lead data for the agent workflow.&quot;&quot;&quot;
+    """Prepare validated lead data for the agent workflow."""
 
     @staticmethod
-    def build(lead: LeadRecord) -&gt; WorkflowContext:
-        return build_workflow_context(lead)</file><file path="backend/app/services/workflow_context.py">from datetime import datetime, timezone
+    def build(lead: LeadRecord) -> WorkflowContext:
+        return build_workflow_context(lead)
+</file>
+
+<file path="backend/app/services/workflow_context.py">
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -671,20 +756,20 @@ class WorkflowContext(BaseModel):
     metadata: dict[str, str] = Field(default_factory=dict)
 
 
-def build_workflow_context(lead: LeadRecord) -&gt; WorkflowContext:
-    &quot;&quot;&quot;
+def build_workflow_context(lead: LeadRecord) -> WorkflowContext:
+    """
     Create an isolated shared context for one lead-analysis run.
 
     Each run receives a unique ID and its own copy of the lead.
-    &quot;&quot;&quot;
+    """
     return WorkflowContext(
-        workflow_id=f&quot;AA007-{uuid4().hex[:12].upper()}&quot;,
+        workflow_id=f"AA007-{uuid4().hex[:12].upper()}",
         created_at=datetime.now(timezone.utc),
         lead=lead.model_copy(deep=True),
         metadata={
-            &quot;case_id&quot;: &quot;AA007&quot;,
-            &quot;case_name&quot;: &quot;Lead Follow-up Prioritization Intelligence&quot;,
-            &quot;workflow_status&quot;: &quot;INITIALIZED&quot;,
+            "case_id": "AA007",
+            "case_name": "Lead Follow-up Prioritization Intelligence",
+            "workflow_status": "INITIALIZED",
         },
     )
 
@@ -692,8 +777,8 @@ def build_workflow_context(lead: LeadRecord) -&gt; WorkflowContext:
 def add_agent_result(
     context: WorkflowContext,
     result: AgentResult,
-) -&gt; None:
-    &quot;&quot;&quot;Add one agent&apos;s structured result to the shared context.&quot;&quot;&quot;
+) -> None:
+    """Add one agent's structured result to the shared context."""
     context.agent_results.append(result)
     context.evidence.extend(result.evidence)
 
@@ -701,9 +786,21 @@ def add_agent_result(
 def add_workflow_error(
     context: WorkflowContext,
     message: str,
-) -&gt; None:
-    &quot;&quot;&quot;Record an error without losing the workflow context.&quot;&quot;&quot;
-    context.errors.append(message)</file><file path="backend/app/__init__.py"></file><file path="backend/tests/__init__.py"></file><file path="backend/requirements.txt">annotated-doc==0.0.5
+) -> None:
+    """Record an error without losing the workflow context."""
+    context.errors.append(message)
+</file>
+
+<file path="backend/app/__init__.py">
+
+</file>
+
+<file path="backend/tests/__init__.py">
+
+</file>
+
+<file path="backend/requirements.txt">
+annotated-doc==0.0.5
 annotated-types==0.8.0
 anyio==4.16.0
 certifi==2026.10.23
@@ -730,30 +827,632 @@ typing-inspection==0.4.5
 typing_extensions==4.16.0
 uvicorn==0.54.0
 watchfiles==1.3.0
-websockets==17.4</file><file path="frontend/public/favicon.svg">&lt;svg xmlns=&quot;http://www.w3.org/2000/svg&quot; width=&quot;48&quot; height=&quot;46&quot; fill=&quot;none&quot; viewBox=&quot;0 0 48 46&quot;&gt;&lt;path fill=&quot;#863bff&quot; d=&quot;M25.946 44.938c-.664.845-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.287c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.497 0-3.578-1.842-3.578H1.237c-.92 0-1.456-1.04-.92-1.788L10.013.474c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.579 1.842 3.579h11.377c.943 0 1.473 1.088.89 1.83L25.947 44.94z&quot; style=&quot;fill:#863bff;fill:color(display-p3 .5252 .23 1);fill-opacity:1&quot;/&gt;&lt;mask id=&quot;a&quot; width=&quot;48&quot; height=&quot;46&quot; x=&quot;0&quot; y=&quot;0&quot; maskUnits=&quot;userSpaceOnUse&quot; style=&quot;mask-type:alpha&quot;&gt;&lt;path fill=&quot;#000&quot; d=&quot;M25.842 44.938c-.664.844-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.183c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.498 0-3.579-1.842-3.579H1.133c-.92 0-1.456-1.04-.92-1.787L9.91.473c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.578 1.842 3.578h11.377c.943 0 1.473 1.088.89 1.832L25.843 44.94z&quot; style=&quot;fill:#000;fill-opacity:1&quot;/&gt;&lt;/mask&gt;&lt;g mask=&quot;url(#a)&quot;&gt;&lt;g filter=&quot;url(#b)&quot;&gt;&lt;ellipse cx=&quot;5.508&quot; cy=&quot;14.704&quot; fill=&quot;#ede6ff&quot; rx=&quot;5.508&quot; ry=&quot;14.704&quot; style=&quot;fill:#ede6ff;fill:color(display-p3 .9275 .9033 1);fill-opacity:1&quot; transform=&quot;matrix(.00324 1 1 -.00324 -4.47 31.516)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#c)&quot;&gt;&lt;ellipse cx=&quot;10.399&quot; cy=&quot;29.851&quot; fill=&quot;#ede6ff&quot; rx=&quot;10.399&quot; ry=&quot;29.851&quot; style=&quot;fill:#ede6ff;fill:color(display-p3 .9275 .9033 1);fill-opacity:1&quot; transform=&quot;matrix(.00324 1 1 -.00324 -39.328 7.883)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#d)&quot;&gt;&lt;ellipse cx=&quot;5.508&quot; cy=&quot;30.487&quot; fill=&quot;#7e14ff&quot; rx=&quot;5.508&quot; ry=&quot;30.487&quot; style=&quot;fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1&quot; transform=&quot;rotate(89.814 -25.913 -14.639)scale(1 -1)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#e)&quot;&gt;&lt;ellipse cx=&quot;5.508&quot; cy=&quot;30.599&quot; fill=&quot;#7e14ff&quot; rx=&quot;5.508&quot; ry=&quot;30.599&quot; style=&quot;fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1&quot; transform=&quot;rotate(89.814 -32.644 -3.334)scale(1 -1)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#f)&quot;&gt;&lt;ellipse cx=&quot;5.508&quot; cy=&quot;30.599&quot; fill=&quot;#7e14ff&quot; rx=&quot;5.508&quot; ry=&quot;30.599&quot; style=&quot;fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1&quot; transform=&quot;matrix(.00324 1 1 -.00324 -34.34 30.47)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#g)&quot;&gt;&lt;ellipse cx=&quot;14.072&quot; cy=&quot;22.078&quot; fill=&quot;#ede6ff&quot; rx=&quot;14.072&quot; ry=&quot;22.078&quot; style=&quot;fill:#ede6ff;fill:color(display-p3 .9275 .9033 1);fill-opacity:1&quot; transform=&quot;rotate(93.35 24.506 48.493)scale(-1 1)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#h)&quot;&gt;&lt;ellipse cx=&quot;3.47&quot; cy=&quot;21.501&quot; fill=&quot;#7e14ff&quot; rx=&quot;3.47&quot; ry=&quot;21.501&quot; style=&quot;fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1&quot; transform=&quot;rotate(89.009 28.708 47.59)scale(-1 1)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#i)&quot;&gt;&lt;ellipse cx=&quot;3.47&quot; cy=&quot;21.501&quot; fill=&quot;#7e14ff&quot; rx=&quot;3.47&quot; ry=&quot;21.501&quot; style=&quot;fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1&quot; transform=&quot;rotate(89.009 28.708 47.59)scale(-1 1)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#j)&quot;&gt;&lt;ellipse cx=&quot;.387&quot; cy=&quot;8.972&quot; fill=&quot;#7e14ff&quot; rx=&quot;4.407&quot; ry=&quot;29.108&quot; style=&quot;fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1&quot; transform=&quot;rotate(39.51 .387 8.972)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#k)&quot;&gt;&lt;ellipse cx=&quot;47.523&quot; cy=&quot;-6.092&quot; fill=&quot;#7e14ff&quot; rx=&quot;4.407&quot; ry=&quot;29.108&quot; style=&quot;fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1&quot; transform=&quot;rotate(37.892 47.523 -6.092)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#l)&quot;&gt;&lt;ellipse cx=&quot;41.412&quot; cy=&quot;6.333&quot; fill=&quot;#47bfff&quot; rx=&quot;5.971&quot; ry=&quot;9.665&quot; style=&quot;fill:#47bfff;fill:color(display-p3 .2799 .748 1);fill-opacity:1&quot; transform=&quot;rotate(37.892 41.412 6.333)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#m)&quot;&gt;&lt;ellipse cx=&quot;-1.879&quot; cy=&quot;38.332&quot; fill=&quot;#7e14ff&quot; rx=&quot;4.407&quot; ry=&quot;29.108&quot; style=&quot;fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1&quot; transform=&quot;rotate(37.892 -1.88 38.332)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#n)&quot;&gt;&lt;ellipse cx=&quot;-1.879&quot; cy=&quot;38.332&quot; fill=&quot;#7e14ff&quot; rx=&quot;4.407&quot; ry=&quot;29.108&quot; style=&quot;fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1&quot; transform=&quot;rotate(37.892 -1.88 38.332)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#o)&quot;&gt;&lt;ellipse cx=&quot;35.651&quot; cy=&quot;29.907&quot; fill=&quot;#7e14ff&quot; rx=&quot;4.407&quot; ry=&quot;29.108&quot; style=&quot;fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1&quot; transform=&quot;rotate(37.892 35.651 29.907)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#p)&quot;&gt;&lt;ellipse cx=&quot;38.418&quot; cy=&quot;32.4&quot; fill=&quot;#47bfff&quot; rx=&quot;5.971&quot; ry=&quot;15.297&quot; style=&quot;fill:#47bfff;fill:color(display-p3 .2799 .748 1);fill-opacity:1&quot; transform=&quot;rotate(37.892 38.418 32.4)&quot;/&gt;&lt;/g&gt;&lt;/g&gt;&lt;defs&gt;&lt;filter id=&quot;b&quot; width=&quot;60.045&quot; height=&quot;41.654&quot; x=&quot;-19.77&quot; y=&quot;16.149&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17158&quot; stdDeviation=&quot;7.659&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;c&quot; width=&quot;90.34&quot; height=&quot;51.437&quot; x=&quot;-54.613&quot; y=&quot;-7.533&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17158&quot; stdDeviation=&quot;7.659&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;d&quot; width=&quot;79.355&quot; height=&quot;29.4&quot; x=&quot;-49.64&quot; y=&quot;2.03&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17158&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;e&quot; width=&quot;79.579&quot; height=&quot;29.4&quot; x=&quot;-45.045&quot; y=&quot;20.029&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17158&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;f&quot; width=&quot;79.579&quot; height=&quot;29.4&quot; x=&quot;-43.513&quot; y=&quot;21.178&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17158&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;g&quot; width=&quot;74.749&quot; height=&quot;58.852&quot; x=&quot;15.756&quot; y=&quot;-17.901&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17158&quot; stdDeviation=&quot;7.659&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;h&quot; width=&quot;61.377&quot; height=&quot;25.362&quot; x=&quot;23.548&quot; y=&quot;2.284&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17158&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;i&quot; width=&quot;61.377&quot; height=&quot;25.362&quot; x=&quot;23.548&quot; y=&quot;2.284&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17158&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;j&quot; width=&quot;56.045&quot; height=&quot;63.649&quot; x=&quot;-27.636&quot; y=&quot;-22.853&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17158&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;k&quot; width=&quot;54.814&quot; height=&quot;64.646&quot; x=&quot;20.116&quot; y=&quot;-38.415&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17158&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;l&quot; width=&quot;33.541&quot; height=&quot;35.313&quot; x=&quot;24.641&quot; y=&quot;-11.323&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17158&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;m&quot; width=&quot;54.814&quot; height=&quot;64.646&quot; x=&quot;-29.286&quot; y=&quot;6.009&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17158&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;n&quot; width=&quot;54.814&quot; height=&quot;64.646&quot; x=&quot;-29.286&quot; y=&quot;6.009&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17158&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;o&quot; width=&quot;54.814&quot; height=&quot;64.646&quot; x=&quot;8.244&quot; y=&quot;-2.416&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17158&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;p&quot; width=&quot;39.409&quot; height=&quot;43.623&quot; x=&quot;18.713&quot; y=&quot;10.588&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17158&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;/defs&gt;&lt;/svg&gt;</file><file path="frontend/public/icons.svg">&lt;svg xmlns=&quot;http://www.w3.org/2000/svg&quot;&gt;
-  &lt;symbol id=&quot;bluesky-icon&quot; viewBox=&quot;0 0 16 17&quot;&gt;
-    &lt;g clip-path=&quot;url(#bluesky-clip)&quot;&gt;&lt;path fill=&quot;#08060d&quot; d=&quot;M7.75 7.735c-.693-1.348-2.58-3.86-4.334-5.097-1.68-1.187-2.32-.981-2.74-.79C.188 2.065.1 2.812.1 3.251s.241 3.602.398 4.13c.52 1.744 2.367 2.333 4.07 2.145-2.495.37-4.71 1.278-1.805 4.512 3.196 3.309 4.38-.71 4.987-2.746.608 2.036 1.307 5.91 4.93 2.746 2.72-2.746.747-4.143-1.747-4.512 1.702.189 3.55-.4 4.07-2.145.156-.528.397-3.691.397-4.13s-.088-1.186-.575-1.406c-.42-.19-1.06-.395-2.741.79-1.755 1.24-3.64 3.752-4.334 5.099&quot;/&gt;&lt;/g&gt;
-    &lt;defs&gt;&lt;clipPath id=&quot;bluesky-clip&quot;&gt;&lt;path fill=&quot;#fff&quot; d=&quot;M.1.85h15.3v15.3H.1z&quot;/&gt;&lt;/clipPath&gt;&lt;/defs&gt;
-  &lt;/symbol&gt;
-  &lt;symbol id=&quot;discord-icon&quot; viewBox=&quot;0 0 20 19&quot;&gt;
-    &lt;path fill=&quot;#08060d&quot; d=&quot;M16.224 3.768a14.5 14.5 0 0 0-3.67-1.153c-.158.286-.343.67-.47.976a13.5 13.5 0 0 0-4.067 0c-.128-.306-.317-.69-.476-.976A14.4 14.4 0 0 0 3.868 3.77C1.546 7.28.916 10.703 1.231 14.077a14.7 14.7 0 0 0 4.5 2.306q.545-.748.965-1.587a9.5 9.5 0 0 1-1.518-.74q.191-.14.372-.293c2.927 1.369 6.107 1.369 8.999 0q.183.152.372.294-.723.437-1.52.74.418.838.963 1.588a14.6 14.6 0 0 0 4.504-2.308c.37-3.911-.63-7.302-2.644-10.309m-9.13 8.234c-.878 0-1.599-.82-1.599-1.82 0-.998.705-1.82 1.6-1.82.894 0 1.614.82 1.599 1.82.001 1-.705 1.82-1.6 1.82m5.91 0c-.878 0-1.599-.82-1.599-1.82 0-.998.705-1.82 1.6-1.82.893 0 1.614.82 1.599 1.82 0 1-.706 1.82-1.6 1.82&quot;/&gt;
-  &lt;/symbol&gt;
-  &lt;symbol id=&quot;documentation-icon&quot; viewBox=&quot;0 0 21 20&quot;&gt;
-    &lt;path fill=&quot;none&quot; stroke=&quot;#aa3bff&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot; stroke-width=&quot;1.35&quot; d=&quot;m15.5 13.333 1.533 1.322c.645.555.967.833.967 1.178s-.322.623-.967 1.179L15.5 18.333m-3.333-5-1.534 1.322c-.644.555-.966.833-.966 1.178s.322.623.966 1.179l1.534 1.321&quot;/&gt;
-    &lt;path fill=&quot;none&quot; stroke=&quot;#aa3bff&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot; stroke-width=&quot;1.35&quot; d=&quot;M17.167 10.836v-4.32c0-1.41 0-2.117-.224-2.68-.359-.906-1.118-1.621-2.08-1.96-.599-.21-1.349-.21-2.848-.21-2.623 0-3.935 0-4.983.369-1.684.591-3.013 1.842-3.641 3.428C3 6.449 3 7.684 3 10.154v2.122c0 2.558 0 3.838.706 4.726q.306.383.713.671c.76.536 1.79.64 3.581.66&quot;/&gt;
-    &lt;path fill=&quot;none&quot; stroke=&quot;#aa3bff&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot; stroke-width=&quot;1.35&quot; d=&quot;M3 10a2.78 2.78 0 0 1 2.778-2.778c.555 0 1.209.097 1.748-.047.48-.129.854-.503.982-.982.145-.54.048-1.194.048-1.749a2.78 2.78 0 0 1 2.777-2.777&quot;/&gt;
-  &lt;/symbol&gt;
-  &lt;symbol id=&quot;github-icon&quot; viewBox=&quot;0 0 19 19&quot;&gt;
-    &lt;path fill=&quot;#08060d&quot; fill-rule=&quot;evenodd&quot; d=&quot;M9.356 1.85C5.05 1.85 1.57 5.356 1.57 9.694a7.84 7.84 0 0 0 5.324 7.44c.387.079.528-.168.528-.376 0-.182-.013-.805-.013-1.454-2.165.467-2.616-.935-2.616-.935-.349-.91-.864-1.143-.864-1.143-.71-.48.051-.48.051-.48.787.051 1.2.805 1.2.805.695 1.194 1.817.857 2.268.649.064-.507.27-.857.49-1.052-1.728-.182-3.545-.857-3.545-3.87 0-.857.31-1.558.8-2.104-.078-.195-.349-1 .077-2.078 0 0 .657-.208 2.14.805a7.5 7.5 0 0 1 1.946-.26c.657 0 1.328.092 1.946.26 1.483-1.013 2.14-.805 2.14-.805.426 1.078.155 1.883.078 2.078.502.546.799 1.247.799 2.104 0 3.013-1.818 3.675-3.558 3.87.284.247.528.714.528 1.454 0 1.052-.012 1.896-.012 2.156 0 .208.142.455.528.377a7.84 7.84 0 0 0 5.324-7.441c.013-4.338-3.48-7.844-7.773-7.844&quot; clip-rule=&quot;evenodd&quot;/&gt;
-  &lt;/symbol&gt;
-  &lt;symbol id=&quot;social-icon&quot; viewBox=&quot;0 0 20 20&quot;&gt;
-    &lt;path fill=&quot;none&quot; stroke=&quot;#aa3bff&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot; stroke-width=&quot;1.35&quot; d=&quot;M12.5 6.667a4.167 4.167 0 1 0-8.334 0 4.167 4.167 0 0 0 8.334 0&quot;/&gt;
-    &lt;path fill=&quot;none&quot; stroke=&quot;#aa3bff&quot; stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot; stroke-width=&quot;1.35&quot; d=&quot;M2.5 16.667a5.833 5.833 0 0 1 8.75-5.053m3.837.474.513 1.035c.07.144.257.282.414.309l.93.155c.596.1.736.536.307.965l-.723.73a.64.64 0 0 0-.152.531l.207.903c.164.715-.213.991-.84.618l-.872-.52a.63.63 0 0 0-.577 0l-.872.52c-.624.373-1.003.094-.84-.618l.207-.903a.64.64 0 0 0-.152-.532l-.723-.729c-.426-.43-.289-.864.306-.964l.93-.156a.64.64 0 0 0 .412-.31l.513-1.034c.28-.562.735-.562 1.012 0&quot;/&gt;
-  &lt;/symbol&gt;
-  &lt;symbol id=&quot;x-icon&quot; viewBox=&quot;0 0 19 19&quot;&gt;
-    &lt;path fill=&quot;#08060d&quot; fill-rule=&quot;evenodd&quot; d=&quot;M1.893 1.98c.052.072 1.245 1.769 2.653 3.77l2.892 4.114c.183.261.333.48.333.486s-.068.089-.152.183l-.522.593-.765.867-3.597 4.087c-.375.426-.734.834-.798.905a1 1 0 0 0-.118.148c0 .01.236.017.664.017h.663l.729-.83c.4-.457.796-.906.879-.999a692 692 0 0 0 1.794-2.038c.034-.037.301-.34.594-.675l.551-.624.345-.392a7 7 0 0 1 .34-.374c.006 0 .93 1.306 2.052 2.903l2.084 2.965.045.063h2.275c1.87 0 2.273-.003 2.266-.021-.008-.02-1.098-1.572-3.894-5.547-2.013-2.862-2.28-3.246-2.273-3.266.008-.019.282-.332 2.085-2.38l2-2.274 1.567-1.782c.022-.028-.016-.03-.65-.03h-.674l-.3.342a871 871 0 0 1-1.782 2.025c-.067.075-.405.458-.75.852a100 100 0 0 1-.803.91c-.148.172-.299.344-.99 1.127-.304.343-.32.358-.345.327-.015-.019-.904-1.282-1.976-2.808L6.365 1.85H1.8zm1.782.91 8.078 11.294c.772 1.08 1.413 1.973 1.425 1.984.016.017.241.02 1.05.017l1.03-.004-2.694-3.766L7.796 5.75 5.722 2.852l-1.039-.004-1.039-.004z&quot; clip-rule=&quot;evenodd&quot;/&gt;
-  &lt;/symbol&gt;
-&lt;/svg&gt;</file><file path="frontend/src/assets/react.svg">&lt;svg xmlns=&quot;http://www.w3.org/2000/svg&quot; xmlns:xlink=&quot;http://www.w3.org/1999/xlink&quot; aria-hidden=&quot;true&quot; role=&quot;img&quot; class=&quot;iconify iconify--logos&quot; width=&quot;35.93&quot; height=&quot;32&quot; preserveAspectRatio=&quot;xMidYMid meet&quot; viewBox=&quot;0 0 256 228&quot;&gt;&lt;path fill=&quot;#00D8FF&quot; d=&quot;M210.483 73.824a171.49 171.49 0 0 0-8.24-2.597c.465-1.9.893-3.777 1.273-5.621c6.238-30.281 2.16-54.676-11.769-62.708c-13.355-7.7-35.196.329-57.254 19.526a171.23 171.23 0 0 0-6.375 5.848a155.866 155.866 0 0 0-4.241-3.917C100.759 3.829 77.587-4.822 63.673 3.233C50.33 10.957 46.379 33.89 51.995 62.588a170.974 170.974 0 0 0 1.892 8.48c-3.28.932-6.445 1.924-9.474 2.98C17.309 83.498 0 98.307 0 113.668c0 15.865 18.582 31.778 46.812 41.427a145.52 145.52 0 0 0 6.921 2.165a167.467 167.467 0 0 0-2.01 9.138c-5.354 28.2-1.173 50.591 12.134 58.266c13.744 7.926 36.812-.22 59.273-19.855a145.567 145.567 0 0 0 5.342-4.923a168.064 168.064 0 0 0 6.92 6.314c21.758 18.722 43.246 26.282 56.54 18.586c13.731-7.949 18.194-32.003 12.4-61.268a145.016 145.016 0 0 0-1.535-6.842c1.62-.48 3.21-.974 4.76-1.488c29.348-9.723 48.443-25.443 48.443-41.52c0-15.417-17.868-30.326-45.517-39.844Zm-6.365 70.984c-1.4.463-2.836.91-4.3 1.345c-3.24-10.257-7.612-21.163-12.963-32.432c5.106-11 9.31-21.767 12.459-31.957c2.619.758 5.16 1.557 7.61 2.4c23.69 8.156 38.14 20.213 38.14 29.504c0 9.896-15.606 22.743-40.946 31.14Zm-10.514 20.834c2.562 12.94 2.927 24.64 1.23 33.787c-1.524 8.219-4.59 13.698-8.382 15.893c-8.067 4.67-25.32-1.4-43.927-17.412a156.726 156.726 0 0 1-6.437-5.87c7.214-7.889 14.423-17.06 21.459-27.246c12.376-1.098 24.068-2.894 34.671-5.345a134.17 134.17 0 0 1 1.386 6.193ZM87.276 214.515c-7.882 2.783-14.16 2.863-17.955.675c-8.075-4.657-11.432-22.636-6.853-46.752a156.923 156.923 0 0 1 1.869-8.499c10.486 2.32 22.093 3.988 34.498 4.994c7.084 9.967 14.501 19.128 21.976 27.15a134.668 134.668 0 0 1-4.877 4.492c-9.933 8.682-19.886 14.842-28.658 17.94ZM50.35 144.747c-12.483-4.267-22.792-9.812-29.858-15.863c-6.35-5.437-9.555-10.836-9.555-15.216c0-9.322 13.897-21.212 37.076-29.293c2.813-.98 5.757-1.905 8.812-2.773c3.204 10.42 7.406 21.315 12.477 32.332c-5.137 11.18-9.399 22.249-12.634 32.792a134.718 134.718 0 0 1-6.318-1.979Zm12.378-84.26c-4.811-24.587-1.616-43.134 6.425-47.789c8.564-4.958 27.502 2.111 47.463 19.835a144.318 144.318 0 0 1 3.841 3.545c-7.438 7.987-14.787 17.08-21.808 26.988c-12.04 1.116-23.565 2.908-34.161 5.309a160.342 160.342 0 0 1-1.76-7.887Zm110.427 27.268a347.8 347.8 0 0 0-7.785-12.803c8.168 1.033 15.994 2.404 23.343 4.08c-2.206 7.072-4.956 14.465-8.193 22.045a381.151 381.151 0 0 0-7.365-13.322Zm-45.032-43.861c5.044 5.465 10.096 11.566 15.065 18.186a322.04 322.04 0 0 0-30.257-.006c4.974-6.559 10.069-12.652 15.192-18.18ZM82.802 87.83a323.167 323.167 0 0 0-7.227 13.238c-3.184-7.553-5.909-14.98-8.134-22.152c7.304-1.634 15.093-2.97 23.209-3.984a321.524 321.524 0 0 0-7.848 12.897Zm8.081 65.352c-8.385-.936-16.291-2.203-23.593-3.793c2.26-7.3 5.045-14.885 8.298-22.6a321.187 321.187 0 0 0 7.257 13.246c2.594 4.48 5.28 8.868 8.038 13.147Zm37.542 31.03c-5.184-5.592-10.354-11.779-15.403-18.433c4.902.192 9.899.29 14.978.29c5.218 0 10.376-.117 15.453-.343c-4.985 6.774-10.018 12.97-15.028 18.486Zm52.198-57.817c3.422 7.8 6.306 15.345 8.596 22.52c-7.422 1.694-15.436 3.058-23.88 4.071a382.417 382.417 0 0 0 7.859-13.026a347.403 347.403 0 0 0 7.425-13.565Zm-16.898 8.101a358.557 358.557 0 0 1-12.281 19.815a329.4 329.4 0 0 1-23.444.823c-7.967 0-15.716-.248-23.178-.732a310.202 310.202 0 0 1-12.513-19.846h.001a307.41 307.41 0 0 1-10.923-20.627a310.278 310.278 0 0 1 10.89-20.637l-.001.001a307.318 307.318 0 0 1 12.413-19.761c7.613-.576 15.42-.876 23.31-.876H128c7.926 0 15.743.303 23.354.883a329.357 329.357 0 0 1 12.335 19.695a358.489 358.489 0 0 1 11.036 20.54a329.472 329.472 0 0 1-11 20.722Zm22.56-122.124c8.572 4.944 11.906 24.881 6.52 51.026c-.344 1.668-.73 3.367-1.15 5.09c-10.622-2.452-22.155-4.275-34.23-5.408c-7.034-10.017-14.323-19.124-21.64-27.008a160.789 160.789 0 0 1 5.888-5.4c18.9-16.447 36.564-22.941 44.612-18.3ZM128 90.808c12.625 0 22.86 10.235 22.86 22.86s-10.235 22.86-22.86 22.86s-22.86-10.235-22.86-22.86s10.235-22.86 22.86-22.86Z&quot;&gt;&lt;/path&gt;&lt;/svg&gt;</file><file path="frontend/src/assets/vite.svg">&lt;svg xmlns=&quot;http://www.w3.org/2000/svg&quot; width=&quot;77&quot; height=&quot;47&quot; fill=&quot;none&quot; aria-labelledby=&quot;vite-logo-title&quot; viewBox=&quot;0 0 77 47&quot;&gt;&lt;title id=&quot;vite-logo-title&quot;&gt;Vite&lt;/title&gt;&lt;style&gt;.parenthesis{fill:#000}@media (prefers-color-scheme:dark){.parenthesis{fill:#fff}}&lt;/style&gt;&lt;path fill=&quot;#9135ff&quot; d=&quot;M40.151 45.71c-.663.844-2.02.374-2.02-.699V34.708a2.26 2.26 0 0 0-2.262-2.262H24.493c-.92 0-1.457-1.04-.92-1.788l7.479-10.471c1.07-1.498 0-3.578-1.842-3.578H15.443c-.92 0-1.456-1.04-.92-1.788l9.696-13.576c.213-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.472c-1.07 1.497 0 3.578 1.842 3.578h11.376c.944 0 1.474 1.087.89 1.83L40.153 45.712z&quot;/&gt;&lt;mask id=&quot;a&quot; width=&quot;48&quot; height=&quot;47&quot; x=&quot;14&quot; y=&quot;0&quot; maskUnits=&quot;userSpaceOnUse&quot; style=&quot;mask-type:alpha&quot;&gt;&lt;path fill=&quot;#000&quot; d=&quot;M40.047 45.71c-.663.843-2.02.374-2.02-.699V34.708a2.26 2.26 0 0 0-2.262-2.262H24.389c-.92 0-1.457-1.04-.92-1.788l7.479-10.472c1.07-1.497 0-3.578-1.842-3.578H15.34c-.92 0-1.456-1.04-.92-1.788l9.696-13.575c.213-.297.556-.474.92-.474H53.93c.92 0 1.456 1.04.92 1.788L47.37 13.03c-1.07 1.498 0 3.578 1.842 3.578h11.376c.944 0 1.474 1.088.89 1.831L40.049 45.712z&quot;/&gt;&lt;/mask&gt;&lt;g mask=&quot;url(#a)&quot;&gt;&lt;g filter=&quot;url(#b)&quot;&gt;&lt;ellipse cx=&quot;5.508&quot; cy=&quot;14.704&quot; fill=&quot;#eee6ff&quot; rx=&quot;5.508&quot; ry=&quot;14.704&quot; transform=&quot;rotate(269.814 20.96 11.29)scale(-1 1)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#c)&quot;&gt;&lt;ellipse cx=&quot;10.399&quot; cy=&quot;29.851&quot; fill=&quot;#eee6ff&quot; rx=&quot;10.399&quot; ry=&quot;29.851&quot; transform=&quot;rotate(89.814 -16.902 -8.275)scale(1 -1)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#d)&quot;&gt;&lt;ellipse cx=&quot;5.508&quot; cy=&quot;30.487&quot; fill=&quot;#8900ff&quot; rx=&quot;5.508&quot; ry=&quot;30.487&quot; transform=&quot;rotate(89.814 -19.197 -7.127)scale(1 -1)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#e)&quot;&gt;&lt;ellipse cx=&quot;5.508&quot; cy=&quot;30.599&quot; fill=&quot;#8900ff&quot; rx=&quot;5.508&quot; ry=&quot;30.599&quot; transform=&quot;rotate(89.814 -25.928 4.177)scale(1 -1)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#f)&quot;&gt;&lt;ellipse cx=&quot;5.508&quot; cy=&quot;30.599&quot; fill=&quot;#8900ff&quot; rx=&quot;5.508&quot; ry=&quot;30.599&quot; transform=&quot;rotate(89.814 -25.738 5.52)scale(1 -1)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#g)&quot;&gt;&lt;ellipse cx=&quot;14.072&quot; cy=&quot;22.078&quot; fill=&quot;#eee6ff&quot; rx=&quot;14.072&quot; ry=&quot;22.078&quot; transform=&quot;rotate(93.35 31.245 55.578)scale(-1 1)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#h)&quot;&gt;&lt;ellipse cx=&quot;3.47&quot; cy=&quot;21.501&quot; fill=&quot;#8900ff&quot; rx=&quot;3.47&quot; ry=&quot;21.501&quot; transform=&quot;rotate(89.009 35.419 55.202)scale(-1 1)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#i)&quot;&gt;&lt;ellipse cx=&quot;3.47&quot; cy=&quot;21.501&quot; fill=&quot;#8900ff&quot; rx=&quot;3.47&quot; ry=&quot;21.501&quot; transform=&quot;rotate(89.009 35.419 55.202)scale(-1 1)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#j)&quot;&gt;&lt;ellipse cx=&quot;14.592&quot; cy=&quot;9.743&quot; fill=&quot;#8900ff&quot; rx=&quot;4.407&quot; ry=&quot;29.108&quot; transform=&quot;rotate(39.51 14.592 9.743)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#k)&quot;&gt;&lt;ellipse cx=&quot;61.728&quot; cy=&quot;-5.321&quot; fill=&quot;#8900ff&quot; rx=&quot;4.407&quot; ry=&quot;29.108&quot; transform=&quot;rotate(37.892 61.728 -5.32)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#l)&quot;&gt;&lt;ellipse cx=&quot;55.618&quot; cy=&quot;7.104&quot; fill=&quot;#00c2ff&quot; rx=&quot;5.971&quot; ry=&quot;9.665&quot; transform=&quot;rotate(37.892 55.618 7.104)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#m)&quot;&gt;&lt;ellipse cx=&quot;12.326&quot; cy=&quot;39.103&quot; fill=&quot;#8900ff&quot; rx=&quot;4.407&quot; ry=&quot;29.108&quot; transform=&quot;rotate(37.892 12.326 39.103)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#n)&quot;&gt;&lt;ellipse cx=&quot;12.326&quot; cy=&quot;39.103&quot; fill=&quot;#8900ff&quot; rx=&quot;4.407&quot; ry=&quot;29.108&quot; transform=&quot;rotate(37.892 12.326 39.103)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#o)&quot;&gt;&lt;ellipse cx=&quot;49.857&quot; cy=&quot;30.678&quot; fill=&quot;#8900ff&quot; rx=&quot;4.407&quot; ry=&quot;29.108&quot; transform=&quot;rotate(37.892 49.857 30.678)&quot;/&gt;&lt;/g&gt;&lt;g filter=&quot;url(#p)&quot;&gt;&lt;ellipse cx=&quot;52.623&quot; cy=&quot;33.171&quot; fill=&quot;#00c2ff&quot; rx=&quot;5.971&quot; ry=&quot;15.297&quot; transform=&quot;rotate(37.892 52.623 33.17)&quot;/&gt;&lt;/g&gt;&lt;/g&gt;&lt;path d=&quot;M6.919 0c-9.198 13.166-9.252 33.575 0 46.789h6.215c-9.25-13.214-9.196-33.623 0-46.789zm62.424 0h-6.215c9.198 13.166 9.252 33.575 0 46.789h6.215c9.25-13.214 9.196-33.623 0-46.789&quot; class=&quot;parenthesis&quot;/&gt;&lt;defs&gt;&lt;filter id=&quot;b&quot; width=&quot;60.045&quot; height=&quot;41.654&quot; x=&quot;-5.564&quot; y=&quot;16.92&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17286&quot; stdDeviation=&quot;7.659&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;c&quot; width=&quot;90.34&quot; height=&quot;51.437&quot; x=&quot;-40.407&quot; y=&quot;-6.762&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17286&quot; stdDeviation=&quot;7.659&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;d&quot; width=&quot;79.355&quot; height=&quot;29.4&quot; x=&quot;-35.435&quot; y=&quot;2.801&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17286&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;e&quot; width=&quot;79.579&quot; height=&quot;29.4&quot; x=&quot;-30.84&quot; y=&quot;20.8&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17286&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;f&quot; width=&quot;79.579&quot; height=&quot;29.4&quot; x=&quot;-29.307&quot; y=&quot;21.949&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17286&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;g&quot; width=&quot;74.749&quot; height=&quot;58.852&quot; x=&quot;29.961&quot; y=&quot;-17.13&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17286&quot; stdDeviation=&quot;7.659&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;h&quot; width=&quot;61.377&quot; height=&quot;25.362&quot; x=&quot;37.754&quot; y=&quot;3.055&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17286&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;i&quot; width=&quot;61.377&quot; height=&quot;25.362&quot; x=&quot;37.754&quot; y=&quot;3.055&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17286&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;j&quot; width=&quot;56.045&quot; height=&quot;63.649&quot; x=&quot;-13.43&quot; y=&quot;-22.082&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17286&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;k&quot; width=&quot;54.814&quot; height=&quot;64.646&quot; x=&quot;34.321&quot; y=&quot;-37.644&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17286&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;l&quot; width=&quot;33.541&quot; height=&quot;35.313&quot; x=&quot;38.847&quot; y=&quot;-10.552&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17286&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;m&quot; width=&quot;54.814&quot; height=&quot;64.646&quot; x=&quot;-15.081&quot; y=&quot;6.78&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17286&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;n&quot; width=&quot;54.814&quot; height=&quot;64.646&quot; x=&quot;-15.081&quot; y=&quot;6.78&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17286&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;o&quot; width=&quot;54.814&quot; height=&quot;64.646&quot; x=&quot;22.45&quot; y=&quot;-1.645&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17286&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;filter id=&quot;p&quot; width=&quot;39.409&quot; height=&quot;43.623&quot; x=&quot;32.919&quot; y=&quot;11.36&quot; color-interpolation-filters=&quot;sRGB&quot; filterUnits=&quot;userSpaceOnUse&quot;&gt;&lt;feFlood flood-opacity=&quot;0&quot; result=&quot;BackgroundImageFix&quot;/&gt;&lt;feBlend in=&quot;SourceGraphic&quot; in2=&quot;BackgroundImageFix&quot; result=&quot;shape&quot;/&gt;&lt;feGaussianBlur result=&quot;effect1_foregroundBlur_2002_17286&quot; stdDeviation=&quot;4.596&quot;/&gt;&lt;/filter&gt;&lt;/defs&gt;&lt;/svg&gt;</file><file path="frontend/src/api.ts">const API_BASE_URL = &quot;http://127.0.0.1:8000&quot;;
+websockets==17.4
+</file>
+
+<file path="frontend/public/favicon.svg">
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="46" fill="none" viewBox="0 0 48 46"><path fill="#863bff" d="M25.946 44.938c-.664.845-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.287c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.497 0-3.578-1.842-3.578H1.237c-.92 0-1.456-1.04-.92-1.788L10.013.474c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.579 1.842 3.579h11.377c.943 0 1.473 1.088.89 1.83L25.947 44.94z" style="fill:#863bff;fill:color(display-p3 .5252 .23 1);fill-opacity:1"/><mask id="a" width="48" height="46" x="0" y="0" maskUnits="userSpaceOnUse" style="mask-type:alpha"><path fill="#000" d="M25.842 44.938c-.664.844-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.183c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.498 0-3.579-1.842-3.579H1.133c-.92 0-1.456-1.04-.92-1.787L9.91.473c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.578 1.842 3.578h11.377c.943 0 1.473 1.088.89 1.832L25.843 44.94z" style="fill:#000;fill-opacity:1"/></mask><g mask="url(#a)"><g filter="url(#b)"><ellipse cx="5.508" cy="14.704" fill="#ede6ff" rx="5.508" ry="14.704" style="fill:#ede6ff;fill:color(display-p3 .9275 .9033 1);fill-opacity:1" transform="matrix(.00324 1 1 -.00324 -4.47 31.516)"/></g><g filter="url(#c)"><ellipse cx="10.399" cy="29.851" fill="#ede6ff" rx="10.399" ry="29.851" style="fill:#ede6ff;fill:color(display-p3 .9275 .9033 1);fill-opacity:1" transform="matrix(.00324 1 1 -.00324 -39.328 7.883)"/></g><g filter="url(#d)"><ellipse cx="5.508" cy="30.487" fill="#7e14ff" rx="5.508" ry="30.487" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(89.814 -25.913 -14.639)scale(1 -1)"/></g><g filter="url(#e)"><ellipse cx="5.508" cy="30.599" fill="#7e14ff" rx="5.508" ry="30.599" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(89.814 -32.644 -3.334)scale(1 -1)"/></g><g filter="url(#f)"><ellipse cx="5.508" cy="30.599" fill="#7e14ff" rx="5.508" ry="30.599" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="matrix(.00324 1 1 -.00324 -34.34 30.47)"/></g><g filter="url(#g)"><ellipse cx="14.072" cy="22.078" fill="#ede6ff" rx="14.072" ry="22.078" style="fill:#ede6ff;fill:color(display-p3 .9275 .9033 1);fill-opacity:1" transform="rotate(93.35 24.506 48.493)scale(-1 1)"/></g><g filter="url(#h)"><ellipse cx="3.47" cy="21.501" fill="#7e14ff" rx="3.47" ry="21.501" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(89.009 28.708 47.59)scale(-1 1)"/></g><g filter="url(#i)"><ellipse cx="3.47" cy="21.501" fill="#7e14ff" rx="3.47" ry="21.501" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(89.009 28.708 47.59)scale(-1 1)"/></g><g filter="url(#j)"><ellipse cx=".387" cy="8.972" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(39.51 .387 8.972)"/></g><g filter="url(#k)"><ellipse cx="47.523" cy="-6.092" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(37.892 47.523 -6.092)"/></g><g filter="url(#l)"><ellipse cx="41.412" cy="6.333" fill="#47bfff" rx="5.971" ry="9.665" style="fill:#47bfff;fill:color(display-p3 .2799 .748 1);fill-opacity:1" transform="rotate(37.892 41.412 6.333)"/></g><g filter="url(#m)"><ellipse cx="-1.879" cy="38.332" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(37.892 -1.88 38.332)"/></g><g filter="url(#n)"><ellipse cx="-1.879" cy="38.332" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(37.892 -1.88 38.332)"/></g><g filter="url(#o)"><ellipse cx="35.651" cy="29.907" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(37.892 35.651 29.907)"/></g><g filter="url(#p)"><ellipse cx="38.418" cy="32.4" fill="#47bfff" rx="5.971" ry="15.297" style="fill:#47bfff;fill:color(display-p3 .2799 .748 1);fill-opacity:1" transform="rotate(37.892 38.418 32.4)"/></g></g><defs><filter id="b" width="60.045" height="41.654" x="-19.77" y="16.149" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="7.659"/></filter><filter id="c" width="90.34" height="51.437" x="-54.613" y="-7.533" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="7.659"/></filter><filter id="d" width="79.355" height="29.4" x="-49.64" y="2.03" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="e" width="79.579" height="29.4" x="-45.045" y="20.029" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="f" width="79.579" height="29.4" x="-43.513" y="21.178" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="g" width="74.749" height="58.852" x="15.756" y="-17.901" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="7.659"/></filter><filter id="h" width="61.377" height="25.362" x="23.548" y="2.284" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="i" width="61.377" height="25.362" x="23.548" y="2.284" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="j" width="56.045" height="63.649" x="-27.636" y="-22.853" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="k" width="54.814" height="64.646" x="20.116" y="-38.415" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="l" width="33.541" height="35.313" x="24.641" y="-11.323" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="m" width="54.814" height="64.646" x="-29.286" y="6.009" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="n" width="54.814" height="64.646" x="-29.286" y="6.009" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="o" width="54.814" height="64.646" x="8.244" y="-2.416" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="p" width="39.409" height="43.623" x="18.713" y="10.588" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter></defs></svg>
+</file>
+
+<file path="frontend/public/icons.svg">
+<svg xmlns="http://www.w3.org/2000/svg">
+  <symbol id="bluesky-icon" viewBox="0 0 16 17">
+    <g clip-path="url(#bluesky-clip)"><path fill="#08060d" d="M7.75 7.735c-.693-1.348-2.58-3.86-4.334-5.097-1.68-1.187-2.32-.981-2.74-.79C.188 2.065.1 2.812.1 3.251s.241 3.602.398 4.13c.52 1.744 2.367 2.333 4.07 2.145-2.495.37-4.71 1.278-1.805 4.512 3.196 3.309 4.38-.71 4.987-2.746.608 2.036 1.307 5.91 4.93 2.746 2.72-2.746.747-4.143-1.747-4.512 1.702.189 3.55-.4 4.07-2.145.156-.528.397-3.691.397-4.13s-.088-1.186-.575-1.406c-.42-.19-1.06-.395-2.741.79-1.755 1.24-3.64 3.752-4.334 5.099"/></g>
+    <defs><clipPath id="bluesky-clip"><path fill="#fff" d="M.1.85h15.3v15.3H.1z"/></clipPath></defs>
+  </symbol>
+  <symbol id="discord-icon" viewBox="0 0 20 19">
+    <path fill="#08060d" d="M16.224 3.768a14.5 14.5 0 0 0-3.67-1.153c-.158.286-.343.67-.47.976a13.5 13.5 0 0 0-4.067 0c-.128-.306-.317-.69-.476-.976A14.4 14.4 0 0 0 3.868 3.77C1.546 7.28.916 10.703 1.231 14.077a14.7 14.7 0 0 0 4.5 2.306q.545-.748.965-1.587a9.5 9.5 0 0 1-1.518-.74q.191-.14.372-.293c2.927 1.369 6.107 1.369 8.999 0q.183.152.372.294-.723.437-1.52.74.418.838.963 1.588a14.6 14.6 0 0 0 4.504-2.308c.37-3.911-.63-7.302-2.644-10.309m-9.13 8.234c-.878 0-1.599-.82-1.599-1.82 0-.998.705-1.82 1.6-1.82.894 0 1.614.82 1.599 1.82.001 1-.705 1.82-1.6 1.82m5.91 0c-.878 0-1.599-.82-1.599-1.82 0-.998.705-1.82 1.6-1.82.893 0 1.614.82 1.599 1.82 0 1-.706 1.82-1.6 1.82"/>
+  </symbol>
+  <symbol id="documentation-icon" viewBox="0 0 21 20">
+    <path fill="none" stroke="#aa3bff" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.35" d="m15.5 13.333 1.533 1.322c.645.555.967.833.967 1.178s-.322.623-.967 1.179L15.5 18.333m-3.333-5-1.534 1.322c-.644.555-.966.833-.966 1.178s.322.623.966 1.179l1.534 1.321"/>
+    <path fill="none" stroke="#aa3bff" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.35" d="M17.167 10.836v-4.32c0-1.41 0-2.117-.224-2.68-.359-.906-1.118-1.621-2.08-1.96-.599-.21-1.349-.21-2.848-.21-2.623 0-3.935 0-4.983.369-1.684.591-3.013 1.842-3.641 3.428C3 6.449 3 7.684 3 10.154v2.122c0 2.558 0 3.838.706 4.726q.306.383.713.671c.76.536 1.79.64 3.581.66"/>
+    <path fill="none" stroke="#aa3bff" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.35" d="M3 10a2.78 2.78 0 0 1 2.778-2.778c.555 0 1.209.097 1.748-.047.48-.129.854-.503.982-.982.145-.54.048-1.194.048-1.749a2.78 2.78 0 0 1 2.777-2.777"/>
+  </symbol>
+  <symbol id="github-icon" viewBox="0 0 19 19">
+    <path fill="#08060d" fill-rule="evenodd" d="M9.356 1.85C5.05 1.85 1.57 5.356 1.57 9.694a7.84 7.84 0 0 0 5.324 7.44c.387.079.528-.168.528-.376 0-.182-.013-.805-.013-1.454-2.165.467-2.616-.935-2.616-.935-.349-.91-.864-1.143-.864-1.143-.71-.48.051-.48.051-.48.787.051 1.2.805 1.2.805.695 1.194 1.817.857 2.268.649.064-.507.27-.857.49-1.052-1.728-.182-3.545-.857-3.545-3.87 0-.857.31-1.558.8-2.104-.078-.195-.349-1 .077-2.078 0 0 .657-.208 2.14.805a7.5 7.5 0 0 1 1.946-.26c.657 0 1.328.092 1.946.26 1.483-1.013 2.14-.805 2.14-.805.426 1.078.155 1.883.078 2.078.502.546.799 1.247.799 2.104 0 3.013-1.818 3.675-3.558 3.87.284.247.528.714.528 1.454 0 1.052-.012 1.896-.012 2.156 0 .208.142.455.528.377a7.84 7.84 0 0 0 5.324-7.441c.013-4.338-3.48-7.844-7.773-7.844" clip-rule="evenodd"/>
+  </symbol>
+  <symbol id="social-icon" viewBox="0 0 20 20">
+    <path fill="none" stroke="#aa3bff" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.35" d="M12.5 6.667a4.167 4.167 0 1 0-8.334 0 4.167 4.167 0 0 0 8.334 0"/>
+    <path fill="none" stroke="#aa3bff" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.35" d="M2.5 16.667a5.833 5.833 0 0 1 8.75-5.053m3.837.474.513 1.035c.07.144.257.282.414.309l.93.155c.596.1.736.536.307.965l-.723.73a.64.64 0 0 0-.152.531l.207.903c.164.715-.213.991-.84.618l-.872-.52a.63.63 0 0 0-.577 0l-.872.52c-.624.373-1.003.094-.84-.618l.207-.903a.64.64 0 0 0-.152-.532l-.723-.729c-.426-.43-.289-.864.306-.964l.93-.156a.64.64 0 0 0 .412-.31l.513-1.034c.28-.562.735-.562 1.012 0"/>
+  </symbol>
+  <symbol id="x-icon" viewBox="0 0 19 19">
+    <path fill="#08060d" fill-rule="evenodd" d="M1.893 1.98c.052.072 1.245 1.769 2.653 3.77l2.892 4.114c.183.261.333.48.333.486s-.068.089-.152.183l-.522.593-.765.867-3.597 4.087c-.375.426-.734.834-.798.905a1 1 0 0 0-.118.148c0 .01.236.017.664.017h.663l.729-.83c.4-.457.796-.906.879-.999a692 692 0 0 0 1.794-2.038c.034-.037.301-.34.594-.675l.551-.624.345-.392a7 7 0 0 1 .34-.374c.006 0 .93 1.306 2.052 2.903l2.084 2.965.045.063h2.275c1.87 0 2.273-.003 2.266-.021-.008-.02-1.098-1.572-3.894-5.547-2.013-2.862-2.28-3.246-2.273-3.266.008-.019.282-.332 2.085-2.38l2-2.274 1.567-1.782c.022-.028-.016-.03-.65-.03h-.674l-.3.342a871 871 0 0 1-1.782 2.025c-.067.075-.405.458-.75.852a100 100 0 0 1-.803.91c-.148.172-.299.344-.99 1.127-.304.343-.32.358-.345.327-.015-.019-.904-1.282-1.976-2.808L6.365 1.85H1.8zm1.782.91 8.078 11.294c.772 1.08 1.413 1.973 1.425 1.984.016.017.241.02 1.05.017l1.03-.004-2.694-3.766L7.796 5.75 5.722 2.852l-1.039-.004-1.039-.004z" clip-rule="evenodd"/>
+  </symbol>
+</svg>
+</file>
+
+<file path="frontend/src/assets/react.svg">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true" role="img" class="iconify iconify--logos" width="35.93" height="32" preserveAspectRatio="xMidYMid meet" viewBox="0 0 256 228"><path fill="#00D8FF" d="M210.483 73.824a171.49 171.49 0 0 0-8.24-2.597c.465-1.9.893-3.777 1.273-5.621c6.238-30.281 2.16-54.676-11.769-62.708c-13.355-7.7-35.196.329-57.254 19.526a171.23 171.23 0 0 0-6.375 5.848a155.866 155.866 0 0 0-4.241-3.917C100.759 3.829 77.587-4.822 63.673 3.233C50.33 10.957 46.379 33.89 51.995 62.588a170.974 170.974 0 0 0 1.892 8.48c-3.28.932-6.445 1.924-9.474 2.98C17.309 83.498 0 98.307 0 113.668c0 15.865 18.582 31.778 46.812 41.427a145.52 145.52 0 0 0 6.921 2.165a167.467 167.467 0 0 0-2.01 9.138c-5.354 28.2-1.173 50.591 12.134 58.266c13.744 7.926 36.812-.22 59.273-19.855a145.567 145.567 0 0 0 5.342-4.923a168.064 168.064 0 0 0 6.92 6.314c21.758 18.722 43.246 26.282 56.54 18.586c13.731-7.949 18.194-32.003 12.4-61.268a145.016 145.016 0 0 0-1.535-6.842c1.62-.48 3.21-.974 4.76-1.488c29.348-9.723 48.443-25.443 48.443-41.52c0-15.417-17.868-30.326-45.517-39.844Zm-6.365 70.984c-1.4.463-2.836.91-4.3 1.345c-3.24-10.257-7.612-21.163-12.963-32.432c5.106-11 9.31-21.767 12.459-31.957c2.619.758 5.16 1.557 7.61 2.4c23.69 8.156 38.14 20.213 38.14 29.504c0 9.896-15.606 22.743-40.946 31.14Zm-10.514 20.834c2.562 12.94 2.927 24.64 1.23 33.787c-1.524 8.219-4.59 13.698-8.382 15.893c-8.067 4.67-25.32-1.4-43.927-17.412a156.726 156.726 0 0 1-6.437-5.87c7.214-7.889 14.423-17.06 21.459-27.246c12.376-1.098 24.068-2.894 34.671-5.345a134.17 134.17 0 0 1 1.386 6.193ZM87.276 214.515c-7.882 2.783-14.16 2.863-17.955.675c-8.075-4.657-11.432-22.636-6.853-46.752a156.923 156.923 0 0 1 1.869-8.499c10.486 2.32 22.093 3.988 34.498 4.994c7.084 9.967 14.501 19.128 21.976 27.15a134.668 134.668 0 0 1-4.877 4.492c-9.933 8.682-19.886 14.842-28.658 17.94ZM50.35 144.747c-12.483-4.267-22.792-9.812-29.858-15.863c-6.35-5.437-9.555-10.836-9.555-15.216c0-9.322 13.897-21.212 37.076-29.293c2.813-.98 5.757-1.905 8.812-2.773c3.204 10.42 7.406 21.315 12.477 32.332c-5.137 11.18-9.399 22.249-12.634 32.792a134.718 134.718 0 0 1-6.318-1.979Zm12.378-84.26c-4.811-24.587-1.616-43.134 6.425-47.789c8.564-4.958 27.502 2.111 47.463 19.835a144.318 144.318 0 0 1 3.841 3.545c-7.438 7.987-14.787 17.08-21.808 26.988c-12.04 1.116-23.565 2.908-34.161 5.309a160.342 160.342 0 0 1-1.76-7.887Zm110.427 27.268a347.8 347.8 0 0 0-7.785-12.803c8.168 1.033 15.994 2.404 23.343 4.08c-2.206 7.072-4.956 14.465-8.193 22.045a381.151 381.151 0 0 0-7.365-13.322Zm-45.032-43.861c5.044 5.465 10.096 11.566 15.065 18.186a322.04 322.04 0 0 0-30.257-.006c4.974-6.559 10.069-12.652 15.192-18.18ZM82.802 87.83a323.167 323.167 0 0 0-7.227 13.238c-3.184-7.553-5.909-14.98-8.134-22.152c7.304-1.634 15.093-2.97 23.209-3.984a321.524 321.524 0 0 0-7.848 12.897Zm8.081 65.352c-8.385-.936-16.291-2.203-23.593-3.793c2.26-7.3 5.045-14.885 8.298-22.6a321.187 321.187 0 0 0 7.257 13.246c2.594 4.48 5.28 8.868 8.038 13.147Zm37.542 31.03c-5.184-5.592-10.354-11.779-15.403-18.433c4.902.192 9.899.29 14.978.29c5.218 0 10.376-.117 15.453-.343c-4.985 6.774-10.018 12.97-15.028 18.486Zm52.198-57.817c3.422 7.8 6.306 15.345 8.596 22.52c-7.422 1.694-15.436 3.058-23.88 4.071a382.417 382.417 0 0 0 7.859-13.026a347.403 347.403 0 0 0 7.425-13.565Zm-16.898 8.101a358.557 358.557 0 0 1-12.281 19.815a329.4 329.4 0 0 1-23.444.823c-7.967 0-15.716-.248-23.178-.732a310.202 310.202 0 0 1-12.513-19.846h.001a307.41 307.41 0 0 1-10.923-20.627a310.278 310.278 0 0 1 10.89-20.637l-.001.001a307.318 307.318 0 0 1 12.413-19.761c7.613-.576 15.42-.876 23.31-.876H128c7.926 0 15.743.303 23.354.883a329.357 329.357 0 0 1 12.335 19.695a358.489 358.489 0 0 1 11.036 20.54a329.472 329.472 0 0 1-11 20.722Zm22.56-122.124c8.572 4.944 11.906 24.881 6.52 51.026c-.344 1.668-.73 3.367-1.15 5.09c-10.622-2.452-22.155-4.275-34.23-5.408c-7.034-10.017-14.323-19.124-21.64-27.008a160.789 160.789 0 0 1 5.888-5.4c18.9-16.447 36.564-22.941 44.612-18.3ZM128 90.808c12.625 0 22.86 10.235 22.86 22.86s-10.235 22.86-22.86 22.86s-22.86-10.235-22.86-22.86s10.235-22.86 22.86-22.86Z"></path></svg>
+</file>
+
+<file path="frontend/src/assets/vite.svg">
+<svg xmlns="http://www.w3.org/2000/svg" width="77" height="47" fill="none" aria-labelledby="vite-logo-title" viewBox="0 0 77 47"><title id="vite-logo-title">Vite</title><style>.parenthesis{fill:#000}@media (prefers-color-scheme:dark){.parenthesis{fill:#fff}}</style><path fill="#9135ff" d="M40.151 45.71c-.663.844-2.02.374-2.02-.699V34.708a2.26 2.26 0 0 0-2.262-2.262H24.493c-.92 0-1.457-1.04-.92-1.788l7.479-10.471c1.07-1.498 0-3.578-1.842-3.578H15.443c-.92 0-1.456-1.04-.92-1.788l9.696-13.576c.213-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.472c-1.07 1.497 0 3.578 1.842 3.578h11.376c.944 0 1.474 1.087.89 1.83L40.153 45.712z"/><mask id="a" width="48" height="47" x="14" y="0" maskUnits="userSpaceOnUse" style="mask-type:alpha"><path fill="#000" d="M40.047 45.71c-.663.843-2.02.374-2.02-.699V34.708a2.26 2.26 0 0 0-2.262-2.262H24.389c-.92 0-1.457-1.04-.92-1.788l7.479-10.472c1.07-1.497 0-3.578-1.842-3.578H15.34c-.92 0-1.456-1.04-.92-1.788l9.696-13.575c.213-.297.556-.474.92-.474H53.93c.92 0 1.456 1.04.92 1.788L47.37 13.03c-1.07 1.498 0 3.578 1.842 3.578h11.376c.944 0 1.474 1.088.89 1.831L40.049 45.712z"/></mask><g mask="url(#a)"><g filter="url(#b)"><ellipse cx="5.508" cy="14.704" fill="#eee6ff" rx="5.508" ry="14.704" transform="rotate(269.814 20.96 11.29)scale(-1 1)"/></g><g filter="url(#c)"><ellipse cx="10.399" cy="29.851" fill="#eee6ff" rx="10.399" ry="29.851" transform="rotate(89.814 -16.902 -8.275)scale(1 -1)"/></g><g filter="url(#d)"><ellipse cx="5.508" cy="30.487" fill="#8900ff" rx="5.508" ry="30.487" transform="rotate(89.814 -19.197 -7.127)scale(1 -1)"/></g><g filter="url(#e)"><ellipse cx="5.508" cy="30.599" fill="#8900ff" rx="5.508" ry="30.599" transform="rotate(89.814 -25.928 4.177)scale(1 -1)"/></g><g filter="url(#f)"><ellipse cx="5.508" cy="30.599" fill="#8900ff" rx="5.508" ry="30.599" transform="rotate(89.814 -25.738 5.52)scale(1 -1)"/></g><g filter="url(#g)"><ellipse cx="14.072" cy="22.078" fill="#eee6ff" rx="14.072" ry="22.078" transform="rotate(93.35 31.245 55.578)scale(-1 1)"/></g><g filter="url(#h)"><ellipse cx="3.47" cy="21.501" fill="#8900ff" rx="3.47" ry="21.501" transform="rotate(89.009 35.419 55.202)scale(-1 1)"/></g><g filter="url(#i)"><ellipse cx="3.47" cy="21.501" fill="#8900ff" rx="3.47" ry="21.501" transform="rotate(89.009 35.419 55.202)scale(-1 1)"/></g><g filter="url(#j)"><ellipse cx="14.592" cy="9.743" fill="#8900ff" rx="4.407" ry="29.108" transform="rotate(39.51 14.592 9.743)"/></g><g filter="url(#k)"><ellipse cx="61.728" cy="-5.321" fill="#8900ff" rx="4.407" ry="29.108" transform="rotate(37.892 61.728 -5.32)"/></g><g filter="url(#l)"><ellipse cx="55.618" cy="7.104" fill="#00c2ff" rx="5.971" ry="9.665" transform="rotate(37.892 55.618 7.104)"/></g><g filter="url(#m)"><ellipse cx="12.326" cy="39.103" fill="#8900ff" rx="4.407" ry="29.108" transform="rotate(37.892 12.326 39.103)"/></g><g filter="url(#n)"><ellipse cx="12.326" cy="39.103" fill="#8900ff" rx="4.407" ry="29.108" transform="rotate(37.892 12.326 39.103)"/></g><g filter="url(#o)"><ellipse cx="49.857" cy="30.678" fill="#8900ff" rx="4.407" ry="29.108" transform="rotate(37.892 49.857 30.678)"/></g><g filter="url(#p)"><ellipse cx="52.623" cy="33.171" fill="#00c2ff" rx="5.971" ry="15.297" transform="rotate(37.892 52.623 33.17)"/></g></g><path d="M6.919 0c-9.198 13.166-9.252 33.575 0 46.789h6.215c-9.25-13.214-9.196-33.623 0-46.789zm62.424 0h-6.215c9.198 13.166 9.252 33.575 0 46.789h6.215c9.25-13.214 9.196-33.623 0-46.789" class="parenthesis"/><defs><filter id="b" width="60.045" height="41.654" x="-5.564" y="16.92" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="7.659"/></filter><filter id="c" width="90.34" height="51.437" x="-40.407" y="-6.762" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="7.659"/></filter><filter id="d" width="79.355" height="29.4" x="-35.435" y="2.801" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="e" width="79.579" height="29.4" x="-30.84" y="20.8" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="f" width="79.579" height="29.4" x="-29.307" y="21.949" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="g" width="74.749" height="58.852" x="29.961" y="-17.13" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="7.659"/></filter><filter id="h" width="61.377" height="25.362" x="37.754" y="3.055" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="i" width="61.377" height="25.362" x="37.754" y="3.055" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="j" width="56.045" height="63.649" x="-13.43" y="-22.082" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="k" width="54.814" height="64.646" x="34.321" y="-37.644" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="l" width="33.541" height="35.313" x="38.847" y="-10.552" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="m" width="54.814" height="64.646" x="-15.081" y="6.78" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="n" width="54.814" height="64.646" x="-15.081" y="6.78" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="o" width="54.814" height="64.646" x="22.45" y="-1.645" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="p" width="39.409" height="43.623" x="32.919" y="11.36" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter></defs></svg>
+</file>
+
+<file path="frontend/src/index.css">
+:root {
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+  color: #26364d;
+  background: #f4f7fb;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  min-height: 100%;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background: #f4f7fb;
+}
+
+button {
+  font: inherit;
+}
+
+button:focus-visible {
+  outline: 3px solid #8bb4e5;
+  outline-offset: 3px;
+}
+
+#root {
+  min-height: 100vh;
+}
+</file>
+
+<file path="frontend/src/main.tsx">
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import './index.css'
+import App from './App.tsx'
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+)
+</file>
+
+<file path="frontend/.gitignore">
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+</file>
+
+<file path="frontend/.oxlintrc.json">
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["react", "typescript", "oxc"],
+  "rules": {
+    "react/rules-of-hooks": "error",
+    "react/only-export-components": ["warn", { "allowConstantExport": true }]
+  }
+}
+</file>
+
+<file path="frontend/index.html">
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>frontend</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+</file>
+
+<file path="frontend/package.json">
+{
+  "name": "frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "oxlint": "^1.90.0",
+    "typescript": "~7.0.2",
+    "vite": "^8.3.6"
+  }
+}
+</file>
+
+<file path="frontend/README.md">
+# React + TypeScript + Vite
+
+This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+
+Currently, two official plugins are available:
+
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+
+## React Compiler
+
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+
+## Expanding the Oxlint configuration
+
+If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+
+```json
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["react", "typescript", "oxc"],
+  "options": {
+    "typeAware": true
+  },
+  "rules": {
+    "react/rules-of-hooks": "error",
+    "react/only-export-components": ["warn", { "allowConstantExport": true }]
+  }
+}
+```
+
+See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+</file>
+
+<file path="frontend/tsconfig.app.json">
+{
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    "target": "es2023",
+    "lib": ["ES2023", "DOM"],
+    "module": "esnext",
+    "types": ["vite/client"],
+    "allowArbitraryExtensions": true,
+    "skipLibCheck": true,
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "jsx": "react-jsx",
+
+    /* Linting */
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src"]
+}
+</file>
+
+<file path="frontend/tsconfig.json">
+{
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ]
+}
+</file>
+
+<file path="frontend/tsconfig.node.json">
+{
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
+    "target": "es2023",
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "skipLibCheck": true,
+
+    /* Bundler mode */
+    "module": "nodenext",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+
+    /* Linting */
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["vite.config.ts"]
+}
+</file>
+
+<file path="frontend/vite.config.ts">
+import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite'
+
+// https://vite.dev/config/
+export default defineConfig({
+  plugins: [react()],
+})
+</file>
+
+<file path=".gitignore">
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# Node and frontend
+node_modules/
+dist/
+build/
+.vite/
+
+# IDE and operating system
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+</file>
+
+<file path="README.md">
+# AA007 — Lead Follow-up Prioritization Intelligence
+
+**Agentic AI MVP | RealRails Agentic AI Internship | Phase 1.2**
+
+## 1. Project Overview
+
+AA007 is a deterministic, multi-agent lead follow-up prioritization system. It evaluates business lead information, contact recency, engagement activity, declared fit and follow-up commitments to recommend the next appropriate action.
+
+The application helps sales operations teams understand which leads need immediate attention, which should receive follow-up soon, and which can be nurtured.
+
+## 2. Project Objectives
+
+- Evaluate business lead records using specialized agents.
+- Execute agents in a defined sequence.
+- Share information through a run-scoped shared workflow context.
+- Apply deterministic decision rules.
+- Generate recommendations with supporting reasons and evidence.
+- Record and retrieve workflow audit information.
+- Explain the decision-making process through a user-friendly interface.
+
+## 3. Technology Stack
+
+| Component | Technology |
+|---|---|
+| Backend | Python, FastAPI |
+| Frontend | React, Vite, TypeScript |
+| Styling | CSS |
+| Data validation | Pydantic |
+| Testing | Pytest |
+| Version control | Git, GitHub |
+| Codebase snapshot | Repomix |
+
+## 4. Workflow Architecture
+
+The application follows this sequence:
+
+**Business Input → Context Builder → Run-Scoped Shared Workflow Context → Five Specialized Agents → Rules and Evidence → Final Recommendation → Explanation and Audit**
+
+Each workflow execution creates its own context. Agents contribute their outputs and evidence to that execution.
+
+The context is run-scoped and is not permanent memory.
+
+## 5. Five Specialized Agents
+
+| Order | Agent | Responsibility |
+|---|---|---|
+| 1 | Lead Intake Agent | Checks essential lead information and validates intake details. |
+| 2 | Recency Agent | Evaluates lead age and how recently the lead was contacted. |
+| 3 | Engagement Agent | Evaluates recorded engagement events. |
+| 4 | Fit & SLA Agent | Evaluates declared fit and follow-up commitment status. |
+| 5 | Lead Priority Decision Agent | Combines agent results and applies deterministic decision rules. |
+
+## 6. Decision Outcomes
+
+The workflow produces one of four recommendations:
+
+- `FOLLOW_UP_NOW` — Immediate follow-up is required.
+- `FOLLOW_UP_SOON` — Follow-up should be scheduled soon.
+- `NURTURE` — Continue nurturing the lead rather than prioritizing immediate follow-up.
+- `REQUEST_DATA` — Request missing mandatory information.
+
+## 7. Deterministic Decision Rules
+
+| Rule | Condition | Recommendation |
+|---|---|---|
+| AA007-RULE-01 | Mandatory lead information is missing | REQUEST_DATA |
+| AA007-RULE-02 | A committed follow-up is overdue | FOLLOW_UP_NOW |
+| AA007-RULE-03 | High fit, recent contact and high or moderate engagement | FOLLOW_UP_NOW |
+| AA007-RULE-04 | Stale contact and low engagement | NURTURE |
+| AA007-RULE-05 | Default decision when no earlier rule applies | FOLLOW_UP_SOON |
+
+## 8. Sample Scenarios
+
+| Sample Lead | Scenario | Expected Outcome |
+|---|---|---|
+| AA007-HOT-001 | Overdue committed follow-up | FOLLOW_UP_NOW |
+| AA007-WARM-001 | Moderate fit and recent engagement | FOLLOW_UP_SOON |
+| AA007-STALE-001 | Stale contact and no engagement | NURTURE |
+
+These sample scenarios demonstrate the different decision paths.
+
+## 9. Explainability and Audit
+
+The frontend displays:
+
+- Business lead information.
+- Workflow architecture.
+- Agent execution order and responsibilities.
+- Important inputs for each agent.
+- Structured agent outputs.
+- Collected evidence.
+- Triggered decision rules.
+- Final recommendation and reasoning.
+- Workflow ID and audit reference.
+
+The audit endpoint retrieves the stored execution record, including its timestamp, agent sequence, outputs, triggered rules and recommendation.
+
+**Audit storage limitation:** Records are currently held in backend memory and are cleared when the backend process restarts. This MVP does not use persistent audit storage.
+
+## 10. Project Structure
+
+```text
+AA007-Lead-Followup-Intelligence/
+|
+|-- backend/
+|   |-- app/
+|   |   |-- agents/
+|   |   |-- core/
+|   |   |-- data/
+|   |   |-- models/
+|   |   |-- services/
+|   |   |-- main.py
+|   |-- tests/
+|   |-- requirements.txt
+|
+|-- frontend/
+|   |-- src/
+|   |   |-- App.tsx
+|   |   |-- App.css
+|   |   |-- api.ts
+|   |-- package.json
+|
+|-- AA007-Repomix.xml
+|-- README.md
+```
+
+## 11. Running the Application
+
+### Backend setup
+
+Open PowerShell in the project root:
+
+```powershell
+python -m venv backend/.venv
+
+.\backend\.venv\Scripts\Activate.ps1
+
+pip install -r backend/requirements.txt
+```
+
+Start the backend:
+
+```powershell
+python -m uvicorn app.main:app --app-dir backend --reload
+```
+
+Backend URL:
+
+http://127.0.0.1:8000
+
+API documentation:
+
+http://127.0.0.1:8000/docs
+
+### Frontend setup
+
+Open a second terminal:
+
+```powershell
+cd frontend
+
+npm.cmd install
+
+npm.cmd run dev -- --host 127.0.0.1
+```
+
+Frontend URL:
+
+http://127.0.0.1:5173
+
+## 12. API Endpoints
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/` | Backend welcome information |
+| GET | `/health` | Backend health check |
+| GET | `/leads` | Retrieve sample leads |
+| POST | `/workflow/run` | Execute the five-agent workflow |
+| GET | `/audit/{audit_reference}` | Retrieve a workflow audit record |
+
+## 13. Testing
+
+Run the backend test suite from the project root:
+
+```powershell
+.\backend\.venv\Scripts\python.exe -m pytest -q
+```
+
+Frontend production build:
+
+```powershell
+cd frontend
+
+npm.cmd run build
+```
+
+### Verified development results
+
+- Backend tests: 13 passed.
+- Frontend TypeScript compilation: passed.
+- Vite production build: passed.
+- HOT, WARM and STALE sample scenarios: passed.
+- Audit record retrieval: demonstrated successfully.
+
+## 14. Scope and Limitations
+
+This project is a deterministic MVP.
+
+- Agent decisions use implemented Python logic and rules.
+- Workflow context is limited to an individual execution.
+- Audit records are stored in memory.
+- The project does not claim persistent database storage or permanent memory.
+
+## 15. Repository
+
+GitHub:
+
+https://github.com/dhanushacherian/AA007-Lead-Followup-Intelligence
+
+Latest verified Phase 1.2 commit:
+
+`398e3e1` — Explain and visualize AA007 agent workflow - Phase 1.2
+
+---
+
+**AA007 — Lead Follow-up Prioritization Intelligence**
+
+*Explainable deterministic multi-agent workflow for sales lead prioritization.*
+</file>
+
+<file path="backend/app/services/workflow_service.py">
+from app.agents.lead_intake_agent import LeadIntakeAgent
+from app.agents.recency_agent import RecencyAgent
+from app.agents.engagement_agent import EngagementAgent
+from app.agents.fit_sla_agent import FitSlaAgent
+from app.agents.decision_agent import LeadPriorityDecisionAgent
+
+from app.models.schemas import WorkflowRequest, WorkflowResponse
+from app.services.context_builder import ContextBuilder
+from app.services.audit_service import audit_service
+
+
+class LeadWorkflowService:
+    """Execute the complete AA007 lead-prioritization workflow."""
+
+    def __init__(self):
+        self.agents = [
+            LeadIntakeAgent(),
+            RecencyAgent(),
+            EngagementAgent(),
+            FitSlaAgent(),
+            LeadPriorityDecisionAgent(),
+        ]
+
+    def run(self, request: WorkflowRequest) -> WorkflowResponse:
+        context = ContextBuilder.build(request.lead)
+
+        # Execute all five agents in sequence.
+        for agent in self.agents:
+            agent.run(context)
+
+        decision = context.agent_results[-1]
+        details = decision.details
+
+        recommendation = details.get("recommendation") or "REQUEST_DATA"
+        reasons = details.get("reasons", [])
+        triggered_rules = details.get("triggered_rules", [])
+
+        # Save the actual workflow audit record.
+        audit_reference = audit_service.record_workflow(
+            workflow_id=context.workflow_id,
+            lead_id=context.lead.lead_id,
+            agent_outputs=context.agent_results,
+            triggered_rules=triggered_rules,
+            recommendation=recommendation,
+            errors=context.errors,
+        )
+
+        return WorkflowResponse(
+            workflow_id=context.workflow_id,
+            lead_id=context.lead.lead_id,
+            recommendation=recommendation,
+            priority_score=decision.score,
+            reasons=reasons,
+            triggered_rules=triggered_rules,
+            agent_outputs=context.agent_results,
+            evidence=context.evidence,
+            audit_reference=audit_reference,
+            errors=context.errors,
+        )
+</file>
+
+<file path="frontend/src/api.ts">
+const API_BASE_URL = "http://127.0.0.1:8000";
 
 export interface HealthResponse {
   status: string;
@@ -797,7 +1496,7 @@ export interface AgentResult {
   summary: string;
   evidence: string[];
   score: number | null;
-  details: Record&lt;string, unknown&gt;;
+  details: Record<string, unknown>;
 }
 
 export interface WorkflowResponse {
@@ -825,48 +1524,52 @@ export interface AuditRecord {
   errors: string[];
 }
 
-async function handleResponse&lt;T&gt;(response: Response): Promise&lt;T&gt; {
+async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const message = await response.text();
     throw new Error(`API error ${response.status}: ${message}`);
   }
 
-  return response.json() as Promise&lt;T&gt;;
+  return response.json() as Promise<T>;
 }
 
-export async function checkBackendHealth(): Promise&lt;HealthResponse&gt; {
+export async function checkBackendHealth(): Promise<HealthResponse> {
   const response = await fetch(`${API_BASE_URL}/health`);
-  return handleResponse&lt;HealthResponse&gt;(response);
+  return handleResponse<HealthResponse>(response);
 }
 
-export async function getLeads(): Promise&lt;LeadRecord[]&gt; {
+export async function getLeads(): Promise<LeadRecord[]> {
   const response = await fetch(`${API_BASE_URL}/leads`);
-  return handleResponse&lt;LeadRecord[]&gt;(response);
+  return handleResponse<LeadRecord[]>(response);
 }
 
 export async function runWorkflow(
   lead: LeadRecord
-): Promise&lt;WorkflowResponse&gt; {
+): Promise<WorkflowResponse> {
   const response = await fetch(`${API_BASE_URL}/workflow/run`, {
-    method: &quot;POST&quot;,
+    method: "POST",
     headers: {
-      &quot;Content-Type&quot;: &quot;application/json&quot;,
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({ lead }),
   });
 
-  return handleResponse&lt;WorkflowResponse&gt;(response);
+  return handleResponse<WorkflowResponse>(response);
 }
 
 export async function getAuditRecord(
   auditReference: string
-): Promise&lt;AuditRecord&gt; {
+): Promise<AuditRecord> {
   const response = await fetch(
     `${API_BASE_URL}/audit/${encodeURIComponent(auditReference)}`
   );
 
-  return handleResponse&lt;AuditRecord&gt;(response);
-}</file><file path="frontend/src/App.css">.app-shell {
+  return handleResponse<AuditRecord>(response);
+}
+</file>
+
+<file path="frontend/src/App.css">
+.app-shell {
   max-width: 1500px;
   margin: 0 auto;
   padding: 0 42px 28px;
@@ -1117,7 +1820,7 @@ export async function getAuditRecord(
   overflow-wrap: anywhere;
 }
 
-.lead-item &gt; strong {
+.lead-item > strong {
   display: block;
   font-size: 14px;
   margin-bottom: 6px;
@@ -1806,7 +2509,7 @@ export async function getAuditRecord(
   text-align: center;
 }
 
-.flow-node &gt; span {
+.flow-node > span {
   color: #5279aa;
   font-size: 10px;
   font-weight: 800;
@@ -1919,8 +2622,8 @@ export async function getAuditRecord(
 }
 
 .agent-input-box strong,
-.structured-output &gt; strong,
-.agent-evidence &gt; strong {
+.structured-output > strong,
+.agent-evidence > strong {
   display: block;
   color: #45668f;
   font-size: 10px;
@@ -1958,7 +2661,7 @@ export async function getAuditRecord(
   border-radius: 7px;
   background: #f3f6fa;
   color: #42566f;
-  font-family: Consolas, &quot;Courier New&quot;, monospace;
+  font-family: Consolas, "Courier New", monospace;
   font-size: 10px;
   line-height: 1.7;
 }
@@ -2102,7 +2805,11 @@ export async function getAuditRecord(
   .audit-button {
     width: 100%;
   }
-}</file><file path="frontend/src/App.tsx">import { useEffect, useMemo, useState } from &quot;react&quot;;
+}
+</file>
+
+<file path="frontend/src/App.tsx">
+import { useEffect, useMemo, useState } from "react";
 import {
   checkBackendHealth,
   getLeads,
@@ -2113,56 +2820,56 @@ import {
   type WorkflowResponse,
   type AuditRecord,
   type AgentResult,
-} from &quot;./api&quot;;
-import &quot;./App.css&quot;;
+} from "./api";
+import "./App.css";
 
-const agentGuides: Record&lt;string, { responsibility: string; inputs: string }&gt; = {
-  &quot;Lead Intake Agent&quot;: {
-    responsibility: &quot;Checks whether essential lead information is available and valid.&quot;,
-    inputs: &quot;Contact name, email or phone, lead stage and source.&quot;,
+const agentGuides: Record<string, { responsibility: string; inputs: string }> = {
+  "Lead Intake Agent": {
+    responsibility: "Checks whether essential lead information is available and valid.",
+    inputs: "Contact name, email or phone, lead stage and source.",
   },
-  &quot;Recency Agent&quot;: {
-    responsibility: &quot;Evaluates how old the lead is and how recently the lead was contacted.&quot;,
-    inputs: &quot;Lead age in days and last contact date.&quot;,
+  "Recency Agent": {
+    responsibility: "Evaluates how old the lead is and how recently the lead was contacted.",
+    inputs: "Lead age in days and last contact date.",
   },
-  &quot;Engagement Agent&quot;: {
-    responsibility: &quot;Measures the level of recorded engagement from the lead.&quot;,
-    inputs: &quot;Engagement event count and event types.&quot;,
+  "Engagement Agent": {
+    responsibility: "Measures the level of recorded engagement from the lead.",
+    inputs: "Engagement event count and event types.",
   },
-  &quot;Fit &amp; SLA Agent&quot;: {
-    responsibility: &quot;Checks declared lead fit and whether a committed follow-up is overdue.&quot;,
-    inputs: &quot;Declared fit, follow-up commitment and due date.&quot;,
+  "Fit & SLA Agent": {
+    responsibility: "Checks declared lead fit and whether a committed follow-up is overdue.",
+    inputs: "Declared fit, follow-up commitment and due date.",
   },
-  &quot;Lead Priority Decision Agent&quot;: {
-    responsibility: &quot;Combines the preceding agent outputs and applies deterministic decision rules.&quot;,
-    inputs: &quot;Intake status, recency, engagement, fit and SLA results.&quot;,
+  "Lead Priority Decision Agent": {
+    responsibility: "Combines the preceding agent outputs and applies deterministic decision rules.",
+    inputs: "Intake status, recency, engagement, fit and SLA results.",
   },
 };
 
 function App() {
-  const [health, setHealth] = useState&lt;HealthResponse | null&gt;(null);
-  const [leads, setLeads] = useState&lt;LeadRecord[]&gt;([]);
-  const [selectedLeadId, setSelectedLeadId] = useState(&quot;&quot;);
-  const [result, setResult] = useState&lt;WorkflowResponse | null&gt;(null);
-  const [auditRecord, setAuditRecord] = useState&lt;AuditRecord | null&gt;(null);
+  const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [leads, setLeads] = useState<LeadRecord[]>([]);
+  const [selectedLeadId, setSelectedLeadId] = useState("");
+  const [result, setResult] = useState<WorkflowResponse | null>(null);
+  const [auditRecord, setAuditRecord] = useState<AuditRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [auditLoading, setAuditLoading] = useState(false);
-  const [error, setError] = useState(&quot;&quot;);
-  const [auditError, setAuditError] = useState(&quot;&quot;);
+  const [error, setError] = useState("");
+  const [auditError, setAuditError] = useState("");
 
-  const selectedLead = leads.find((lead) =&gt; lead.lead_id === selectedLeadId) ?? null;
+  const selectedLead = leads.find((lead) => lead.lead_id === selectedLeadId) ?? null;
 
   const attentionCount = useMemo(
-    () =&gt; leads.filter((lead) =&gt; lead.pending_follow_up.committed).length,
+    () => leads.filter((lead) => lead.pending_follow_up.committed).length,
     [leads]
   );
 
-  useEffect(() =&gt; {
+  useEffect(() => {
     async function loadDashboard() {
       try {
         setLoading(true);
-        setError(&quot;&quot;);
+        setError("");
 
         const [healthData, leadData] = await Promise.all([
           checkBackendHealth(),
@@ -2172,11 +2879,11 @@ function App() {
         setHealth(healthData);
         setLeads(leadData);
 
-        if (leadData.length &gt; 0) {
+        if (leadData.length > 0) {
           setSelectedLeadId(leadData[0].lead_id);
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : &quot;Unable to load dashboard.&quot;);
+        setError(err instanceof Error ? err.message : "Unable to load dashboard.");
       } finally {
         setLoading(false);
       }
@@ -2190,15 +2897,15 @@ function App() {
 
     try {
       setRunning(true);
-      setError(&quot;&quot;);
-      setAuditError(&quot;&quot;);
+      setError("");
+      setAuditError("");
       setResult(null);
       setAuditRecord(null);
 
       const workflowResult = await runWorkflow(selectedLead);
       setResult(workflowResult);
     } catch (err) {
-      setError(err instanceof Error ? err.message : &quot;Workflow execution failed.&quot;);
+      setError(err instanceof Error ? err.message : "Workflow execution failed.");
     } finally {
       setRunning(false);
     }
@@ -2209,14 +2916,14 @@ function App() {
 
     try {
       setAuditLoading(true);
-      setAuditError(&quot;&quot;);
+      setAuditError("");
       setAuditRecord(null);
 
       const record = await getAuditRecord(result.audit_reference);
       setAuditRecord(record);
     } catch (err) {
       setAuditError(
-        err instanceof Error ? err.message : &quot;Unable to retrieve audit record.&quot;
+        err instanceof Error ? err.message : "Unable to retrieve audit record."
       );
     } finally {
       setAuditLoading(false);
@@ -2227,22 +2934,22 @@ function App() {
     setSelectedLeadId(leadId);
     setResult(null);
     setAuditRecord(null);
-    setError(&quot;&quot;);
-    setAuditError(&quot;&quot;);
+    setError("");
+    setAuditError("");
   }
 
   function recommendationClass(recommendation: string) {
-    if (recommendation === &quot;FOLLOW_UP_NOW&quot;) return &quot;urgent&quot;;
-    if (recommendation === &quot;FOLLOW_UP_SOON&quot;) return &quot;soon&quot;;
-    if (recommendation === &quot;NURTURE&quot;) return &quot;nurture&quot;;
-    return &quot;request&quot;;
+    if (recommendation === "FOLLOW_UP_NOW") return "urgent";
+    if (recommendation === "FOLLOW_UP_SOON") return "soon";
+    if (recommendation === "NURTURE") return "nurture";
+    return "request";
   }
 
   function displayValue(value: string | null | undefined) {
-    return value || &quot;Not provided&quot;;
+    return value || "Not provided";
   }
 
-  function formatDetails(details: Record&lt;string, unknown&gt;) {
+  function formatDetails(details: Record<string, unknown>) {
     return JSON.stringify(details, null, 2);
   }
 
@@ -2250,843 +2957,548 @@ function App() {
     const guide = agentGuides[agent.agent_name];
 
     return (
-      &lt;article className=&quot;agent-card&quot; key={`${agent.agent_name}-${index}`}&gt;
-        &lt;div className=&quot;agent-card-top&quot;&gt;
-          &lt;span className=&quot;agent-number&quot;&gt;STEP 0{index + 1}&lt;/span&gt;
-          &lt;span className=&quot;agent-status&quot;&gt;{agent.status}&lt;/span&gt;
-        &lt;/div&gt;
+      <article className="agent-card" key={`${agent.agent_name}-${index}`}>
+        <div className="agent-card-top">
+          <span className="agent-number">STEP 0{index + 1}</span>
+          <span className="agent-status">{agent.status}</span>
+        </div>
 
-        &lt;h4&gt;{agent.agent_name}&lt;/h4&gt;
-        &lt;p className=&quot;agent-responsibility&quot;&gt;
-          {guide?.responsibility || &quot;Processes its assigned workflow information.&quot;}
-        &lt;/p&gt;
+        <h4>{agent.agent_name}</h4>
+        <p className="agent-responsibility">
+          {guide?.responsibility || "Processes its assigned workflow information."}
+        </p>
 
-        &lt;div className=&quot;agent-input-box&quot;&gt;
-          &lt;strong&gt;Important inputs&lt;/strong&gt;
-          &lt;p&gt;{guide?.inputs || &quot;See the structured output below.&quot;}&lt;/p&gt;
-        &lt;/div&gt;
+        <div className="agent-input-box">
+          <strong>Important inputs</strong>
+          <p>{guide?.inputs || "See the structured output below."}</p>
+        </div>
 
-        &lt;p className=&quot;agent-summary&quot;&gt;{agent.summary}&lt;/p&gt;
+        <p className="agent-summary">{agent.summary}</p>
 
-        &lt;div className=&quot;structured-output&quot;&gt;
-          &lt;strong&gt;Structured output&lt;/strong&gt;
-          &lt;pre&gt;{formatDetails(agent.details)}&lt;/pre&gt;
-          {agent.score !== null &amp;&amp; (
-            &lt;p className=&quot;agent-score&quot;&gt;Score: {agent.score}&lt;/p&gt;
+        <div className="structured-output">
+          <strong>Structured output</strong>
+          <pre>{formatDetails(agent.details)}</pre>
+          {agent.score !== null && (
+            <p className="agent-score">Score: {agent.score}</p>
           )}
-        &lt;/div&gt;
+        </div>
 
-        {agent.evidence.length &gt; 0 &amp;&amp; (
-          &lt;div className=&quot;agent-evidence&quot;&gt;
-            &lt;strong&gt;Evidence produced&lt;/strong&gt;
-            &lt;ul&gt;
-              {agent.evidence.map((item, evidenceIndex) =&gt; (
-                &lt;li key={evidenceIndex}&gt;{item}&lt;/li&gt;
+        {agent.evidence.length > 0 && (
+          <div className="agent-evidence">
+            <strong>Evidence produced</strong>
+            <ul>
+              {agent.evidence.map((item, evidenceIndex) => (
+                <li key={evidenceIndex}>{item}</li>
               ))}
-            &lt;/ul&gt;
-          &lt;/div&gt;
+            </ul>
+          </div>
         )}
-      &lt;/article&gt;
+      </article>
     );
   }
 
   return (
-    &lt;main className=&quot;app-shell&quot;&gt;
-      &lt;header className=&quot;topbar&quot;&gt;
-        &lt;div className=&quot;brand&quot;&gt;
-          &lt;div className=&quot;brand-mark&quot;&gt;A7&lt;/div&gt;
-          &lt;div&gt;
-            &lt;div className=&quot;brand-name&quot;&gt;AA007 Intelligence&lt;/div&gt;
-            &lt;div className=&quot;brand-subtitle&quot;&gt;Sales Operations · Lead Prioritization&lt;/div&gt;
-          &lt;/div&gt;
-        &lt;/div&gt;
+    <main className="app-shell">
+      <header className="topbar">
+        <div className="brand">
+          <div className="brand-mark">A7</div>
+          <div>
+            <div className="brand-name">AA007 Intelligence</div>
+            <div className="brand-subtitle">Sales Operations · Lead Prioritization</div>
+          </div>
+        </div>
 
-        &lt;div className=&quot;connection&quot;&gt;
-          &lt;span className={`status-dot ${health ? &quot;online&quot; : &quot;offline&quot;}`} /&gt;
-          &lt;span&gt;{health ? &quot;Backend connected&quot; : &quot;Backend unavailable&quot;}&lt;/span&gt;
-        &lt;/div&gt;
-      &lt;/header&gt;
+        <div className="connection">
+          <span className={`status-dot ${health ? "online" : "offline"}`} />
+          <span>{health ? "Backend connected" : "Backend unavailable"}</span>
+        </div>
+      </header>
 
-      &lt;section className=&quot;page-heading&quot;&gt;
-        &lt;div&gt;
-          &lt;p className=&quot;eyebrow&quot;&gt;AGENTIC AI MVP · PHASE 1.2&lt;/p&gt;
-          &lt;h1&gt;Lead Follow-up Intelligence&lt;/h1&gt;
-          &lt;p className=&quot;page-description&quot;&gt;
+      <section className="page-heading">
+        <div>
+          <p className="eyebrow">AGENTIC AI MVP · PHASE 1.2</p>
+          <h1>Lead Follow-up Intelligence</h1>
+          <p className="page-description">
             Understand how specialized agents evaluate lead information,
             share workflow context and produce evidence-based decisions.
-          &lt;/p&gt;
-        &lt;/div&gt;
-        &lt;div className=&quot;system-label&quot;&gt;
-          &lt;span className=&quot;system-label-dot&quot; /&gt;
+          </p>
+        </div>
+        <div className="system-label">
+          <span className="system-label-dot" />
           Deterministic workflow engine
-        &lt;/div&gt;
-      &lt;/section&gt;
+        </div>
+      </section>
 
-      {error &amp;&amp; &lt;div className=&quot;error-banner&quot;&gt;{error}&lt;/div&gt;}
+      {error && <div className="error-banner">{error}</div>}
 
-      &lt;section className=&quot;metrics-grid&quot;&gt;
-        &lt;article className=&quot;metric-card&quot;&gt;
-          &lt;span className=&quot;metric-label&quot;&gt;TOTAL LEADS&lt;/span&gt;
-          &lt;strong&gt;{loading ? &quot;—&quot; : leads.length}&lt;/strong&gt;
-          &lt;span className=&quot;metric-note&quot;&gt;Available sample records&lt;/span&gt;
-        &lt;/article&gt;
-        &lt;article className=&quot;metric-card&quot;&gt;
-          &lt;span className=&quot;metric-label&quot;&gt;COMMITTED FOLLOW-UPS&lt;/span&gt;
-          &lt;strong&gt;{loading ? &quot;—&quot; : attentionCount}&lt;/strong&gt;
-          &lt;span className=&quot;metric-note&quot;&gt;Require deadline evaluation&lt;/span&gt;
-        &lt;/article&gt;
-        &lt;article className=&quot;metric-card&quot;&gt;
-          &lt;span className=&quot;metric-label&quot;&gt;AGENT FRAMEWORK&lt;/span&gt;
-          &lt;strong&gt;05&lt;/strong&gt;
-          &lt;span className=&quot;metric-note&quot;&gt;Specialized workflow agents&lt;/span&gt;
-        &lt;/article&gt;
-        &lt;article className=&quot;metric-card&quot;&gt;
-          &lt;span className=&quot;metric-label&quot;&gt;WORKFLOW STATUS&lt;/span&gt;
-          &lt;strong className=&quot;metric-status&quot;&gt;
-            {result ? &quot;Complete&quot; : running ? &quot;Running&quot; : &quot;Ready&quot;}
-          &lt;/strong&gt;
-          &lt;span className=&quot;metric-note&quot;&gt;Current session&lt;/span&gt;
-        &lt;/article&gt;
-      &lt;/section&gt;
+      <section className="metrics-grid">
+        <article className="metric-card">
+          <span className="metric-label">TOTAL LEADS</span>
+          <strong>{loading ? "—" : leads.length}</strong>
+          <span className="metric-note">Available sample records</span>
+        </article>
+        <article className="metric-card">
+          <span className="metric-label">COMMITTED FOLLOW-UPS</span>
+          <strong>{loading ? "—" : attentionCount}</strong>
+          <span className="metric-note">Require deadline evaluation</span>
+        </article>
+        <article className="metric-card">
+          <span className="metric-label">AGENT FRAMEWORK</span>
+          <strong>05</strong>
+          <span className="metric-note">Specialized workflow agents</span>
+        </article>
+        <article className="metric-card">
+          <span className="metric-label">WORKFLOW STATUS</span>
+          <strong className="metric-status">
+            {result ? "Complete" : running ? "Running" : "Ready"}
+          </strong>
+          <span className="metric-note">Current session</span>
+        </article>
+      </section>
 
-      &lt;section className=&quot;explainer-panel&quot;&gt;
-        &lt;div className=&quot;section-title-row&quot;&gt;
-          &lt;div&gt;
-            &lt;p className=&quot;eyebrow&quot;&gt;HOW THE SYSTEM WORKS&lt;/p&gt;
-            &lt;h2&gt;Agent workflow architecture&lt;/h2&gt;
-          &lt;/div&gt;
-          &lt;span className=&quot;count-badge&quot;&gt;5 AGENTS&lt;/span&gt;
-        &lt;/div&gt;
+      <section className="explainer-panel">
+        <div className="section-title-row">
+          <div>
+            <p className="eyebrow">HOW THE SYSTEM WORKS</p>
+            <h2>Agent workflow architecture</h2>
+          </div>
+          <span className="count-badge">5 AGENTS</span>
+        </div>
 
-        &lt;p className=&quot;workflow-intro&quot;&gt;
+        <p className="workflow-intro">
           Each workflow run starts with one business lead record. The Context
           Builder prepares a run-scoped shared workflow context. Five agents
           then execute in sequence, contributing their results and evidence
           before the decision agent selects a recommendation.
-        &lt;/p&gt;
+        </p>
 
-        &lt;div className=&quot;workflow-flow&quot;&gt;
-          &lt;div className=&quot;flow-node&quot;&gt;
-            &lt;span&gt;01&lt;/span&gt;
-            &lt;strong&gt;Business Input&lt;/strong&gt;
-            &lt;small&gt;Lead record&lt;/small&gt;
-          &lt;/div&gt;
-          &lt;div className=&quot;flow-arrow&quot;&gt;→&lt;/div&gt;
-          &lt;div className=&quot;flow-node&quot;&gt;
-            &lt;span&gt;02&lt;/span&gt;
-            &lt;strong&gt;Context Builder&lt;/strong&gt;
-            &lt;small&gt;Prepares context&lt;/small&gt;
-          &lt;/div&gt;
-          &lt;div className=&quot;flow-arrow&quot;&gt;→&lt;/div&gt;
-          &lt;div className=&quot;flow-node context-node&quot;&gt;
-            &lt;span&gt;03&lt;/span&gt;
-            &lt;strong&gt;Run-Scoped Shared Context&lt;/strong&gt;
-            &lt;small&gt;Shared workflow data&lt;/small&gt;
-          &lt;/div&gt;
-          &lt;div className=&quot;flow-arrow&quot;&gt;→&lt;/div&gt;
-          &lt;div className=&quot;flow-node agent-flow-node&quot;&gt;
-            &lt;span&gt;04&lt;/span&gt;
-            &lt;strong&gt;Five Agents&lt;/strong&gt;
-            &lt;small&gt;Sequential evaluation&lt;/small&gt;
-          &lt;/div&gt;
-          &lt;div className=&quot;flow-arrow&quot;&gt;→&lt;/div&gt;
-          &lt;div className=&quot;flow-node&quot;&gt;
-            &lt;span&gt;05&lt;/span&gt;
-            &lt;strong&gt;Rules &amp; Evidence&lt;/strong&gt;
-            &lt;small&gt;Decision logic&lt;/small&gt;
-          &lt;/div&gt;
-          &lt;div className=&quot;flow-arrow&quot;&gt;→&lt;/div&gt;
-          &lt;div className=&quot;flow-node decision-node&quot;&gt;
-            &lt;span&gt;06&lt;/span&gt;
-            &lt;strong&gt;Recommendation&lt;/strong&gt;
-            &lt;small&gt;Audit record&lt;/small&gt;
-          &lt;/div&gt;
-        &lt;/div&gt;
+        <div className="workflow-flow">
+          <div className="flow-node">
+            <span>01</span>
+            <strong>Business Input</strong>
+            <small>Lead record</small>
+          </div>
+          <div className="flow-arrow">→</div>
+          <div className="flow-node">
+            <span>02</span>
+            <strong>Context Builder</strong>
+            <small>Prepares context</small>
+          </div>
+          <div className="flow-arrow">→</div>
+          <div className="flow-node context-node">
+            <span>03</span>
+            <strong>Run-Scoped Shared Context</strong>
+            <small>Shared workflow data</small>
+          </div>
+          <div className="flow-arrow">→</div>
+          <div className="flow-node agent-flow-node">
+            <span>04</span>
+            <strong>Five Agents</strong>
+            <small>Sequential evaluation</small>
+          </div>
+          <div className="flow-arrow">→</div>
+          <div className="flow-node">
+            <span>05</span>
+            <strong>Rules & Evidence</strong>
+            <small>Decision logic</small>
+          </div>
+          <div className="flow-arrow">→</div>
+          <div className="flow-node decision-node">
+            <span>06</span>
+            <strong>Recommendation</strong>
+            <small>Audit record</small>
+          </div>
+        </div>
 
-        &lt;div className=&quot;workflow-note&quot;&gt;
-          &lt;strong&gt;Shared context:&lt;/strong&gt; The lead data, workflow ID, agent
+        <div className="workflow-note">
+          <strong>Shared context:</strong> The lead data, workflow ID, agent
           results, collected evidence, errors and metadata are held in the
           current workflow context. This is run-scoped data, not permanent memory.
-        &lt;/div&gt;
-      &lt;/section&gt;
+        </div>
+      </section>
 
-      &lt;div className=&quot;workspace-grid&quot;&gt;
-        &lt;aside className=&quot;panel lead-panel&quot;&gt;
-          &lt;div className=&quot;panel-heading&quot;&gt;
-            &lt;div&gt;
-              &lt;p className=&quot;eyebrow&quot;&gt;RECORDS&lt;/p&gt;
-              &lt;h2&gt;Lead directory&lt;/h2&gt;
-            &lt;/div&gt;
-            &lt;span className=&quot;count-badge&quot;&gt;{leads.length}&lt;/span&gt;
-          &lt;/div&gt;
+      <div className="workspace-grid">
+        <aside className="panel lead-panel">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">RECORDS</p>
+              <h2>Lead directory</h2>
+            </div>
+            <span className="count-badge">{leads.length}</span>
+          </div>
 
           {loading ? (
-            &lt;p className=&quot;muted&quot;&gt;Loading leads...&lt;/p&gt;
+            <p className="muted">Loading leads...</p>
           ) : leads.length === 0 ? (
-            &lt;p className=&quot;muted&quot;&gt;No lead records available.&lt;/p&gt;
+            <p className="muted">No lead records available.</p>
           ) : (
-            &lt;div className=&quot;lead-list&quot;&gt;
-              {leads.map((lead) =&gt; (
-                &lt;button
-                  className={`lead-item ${selectedLeadId === lead.lead_id ? &quot;selected&quot; : &quot;&quot;}`}
+            <div className="lead-list">
+              {leads.map((lead) => (
+                <button
+                  className={`lead-item ${selectedLeadId === lead.lead_id ? "selected" : ""}`}
                   key={lead.lead_id}
-                  onClick={() =&gt; selectLead(lead.lead_id)}
-                &gt;
-                  &lt;div className=&quot;lead-item-top&quot;&gt;
-                    &lt;span className=&quot;lead-id&quot;&gt;{lead.lead_id}&lt;/span&gt;
-                    &lt;span className={`fit-tag ${(lead.declared_fit || &quot;unknown&quot;).toLowerCase()}`}&gt;
-                      {lead.declared_fit || &quot;UNKNOWN&quot;}
-                    &lt;/span&gt;
-                  &lt;/div&gt;
-                  &lt;strong&gt;{lead.contact?.name || &quot;Unnamed lead&quot;}&lt;/strong&gt;
-                  &lt;span className=&quot;lead-meta&quot;&gt;
-                    {lead.stage || &quot;No stage&quot;} · {lead.age_days} days old
-                  &lt;/span&gt;
-                &lt;/button&gt;
+                  onClick={() => selectLead(lead.lead_id)}
+                >
+                  <div className="lead-item-top">
+                    <span className="lead-id">{lead.lead_id}</span>
+                    <span className={`fit-tag ${(lead.declared_fit || "unknown").toLowerCase()}`}>
+                      {lead.declared_fit || "UNKNOWN"}
+                    </span>
+                  </div>
+                  <strong>{lead.contact?.name || "Unnamed lead"}</strong>
+                  <span className="lead-meta">
+                    {lead.stage || "No stage"} · {lead.age_days} days old
+                  </span>
+                </button>
               ))}
-            &lt;/div&gt;
+            </div>
           )}
 
-          &lt;div className=&quot;directory-note&quot;&gt;
-            &lt;span className=&quot;info-icon&quot;&gt;i&lt;/span&gt;
+          <div className="directory-note">
+            <span className="info-icon">i</span>
             Select a lead to inspect its details and run the prioritization workflow.
-          &lt;/div&gt;
-        &lt;/aside&gt;
+          </div>
+        </aside>
 
-        &lt;section className=&quot;panel detail-panel&quot;&gt;
-          &lt;div className=&quot;panel-heading&quot;&gt;
-            &lt;div&gt;
-              &lt;p className=&quot;eyebrow&quot;&gt;BUSINESS INPUT&lt;/p&gt;
-              &lt;h2&gt;Lead details&lt;/h2&gt;
-            &lt;/div&gt;
-            {selectedLead &amp;&amp; &lt;span className=&quot;record-label&quot;&gt;Selected record&lt;/span&gt;}
-          &lt;/div&gt;
+        <section className="panel detail-panel">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">BUSINESS INPUT</p>
+              <h2>Lead details</h2>
+            </div>
+            {selectedLead && <span className="record-label">Selected record</span>}
+          </div>
 
           {!selectedLead ? (
-            &lt;p className=&quot;muted&quot;&gt;Select a lead to view its information.&lt;/p&gt;
+            <p className="muted">Select a lead to view its information.</p>
           ) : (
-            &lt;&gt;
-              &lt;div className=&quot;profile-header&quot;&gt;
-                &lt;div className=&quot;avatar&quot;&gt;
-                  {(selectedLead.contact?.name || &quot;L&quot;).charAt(0).toUpperCase()}
-                &lt;/div&gt;
-                &lt;div&gt;
-                  &lt;h3&gt;{selectedLead.contact?.name || selectedLead.lead_id}&lt;/h3&gt;
-                  &lt;p&gt;{selectedLead.contact?.email || selectedLead.lead_id}&lt;/p&gt;
-                &lt;/div&gt;
-              &lt;/div&gt;
+            <>
+              <div className="profile-header">
+                <div className="avatar">
+                  {(selectedLead.contact?.name || "L").charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <h3>{selectedLead.contact?.name || selectedLead.lead_id}</h3>
+                  <p>{selectedLead.contact?.email || selectedLead.lead_id}</p>
+                </div>
+              </div>
 
-              &lt;div className=&quot;detail-grid&quot;&gt;
-                &lt;div className=&quot;detail-field&quot;&gt;
-                  &lt;span&gt;Lead ID&lt;/span&gt;
-                  &lt;strong&gt;{selectedLead.lead_id}&lt;/strong&gt;
-                &lt;/div&gt;
-                &lt;div className=&quot;detail-field&quot;&gt;
-                  &lt;span&gt;Source&lt;/span&gt;
-                  &lt;strong&gt;{displayValue(selectedLead.source)}&lt;/strong&gt;
-                &lt;/div&gt;
-                &lt;div className=&quot;detail-field&quot;&gt;
-                  &lt;span&gt;Current stage&lt;/span&gt;
-                  &lt;strong&gt;{displayValue(selectedLead.stage)}&lt;/strong&gt;
-                &lt;/div&gt;
-                &lt;div className=&quot;detail-field&quot;&gt;
-                  &lt;span&gt;Lead age&lt;/span&gt;
-                  &lt;strong&gt;{selectedLead.age_days} days&lt;/strong&gt;
-                &lt;/div&gt;
-                &lt;div className=&quot;detail-field&quot;&gt;
-                  &lt;span&gt;Declared fit&lt;/span&gt;
-                  &lt;strong&gt;{displayValue(selectedLead.declared_fit)}&lt;/strong&gt;
-                &lt;/div&gt;
-                &lt;div className=&quot;detail-field&quot;&gt;
-                  &lt;span&gt;Last contact&lt;/span&gt;
-                  &lt;strong&gt;{displayValue(selectedLead.last_contact_date)}&lt;/strong&gt;
-                &lt;/div&gt;
-                &lt;div className=&quot;detail-field full-width&quot;&gt;
-                  &lt;span&gt;Declared need&lt;/span&gt;
-                  &lt;strong&gt;{displayValue(selectedLead.declared_need)}&lt;/strong&gt;
-                &lt;/div&gt;
-                &lt;div className=&quot;detail-field full-width&quot;&gt;
-                  &lt;span&gt;Follow-up commitment&lt;/span&gt;
-                  &lt;strong&gt;
-                    {selectedLead.pending_follow_up.committed ? &quot;Committed&quot; : &quot;No committed follow-up&quot;}
+              <div className="detail-grid">
+                <div className="detail-field">
+                  <span>Lead ID</span>
+                  <strong>{selectedLead.lead_id}</strong>
+                </div>
+                <div className="detail-field">
+                  <span>Source</span>
+                  <strong>{displayValue(selectedLead.source)}</strong>
+                </div>
+                <div className="detail-field">
+                  <span>Current stage</span>
+                  <strong>{displayValue(selectedLead.stage)}</strong>
+                </div>
+                <div className="detail-field">
+                  <span>Lead age</span>
+                  <strong>{selectedLead.age_days} days</strong>
+                </div>
+                <div className="detail-field">
+                  <span>Declared fit</span>
+                  <strong>{displayValue(selectedLead.declared_fit)}</strong>
+                </div>
+                <div className="detail-field">
+                  <span>Last contact</span>
+                  <strong>{displayValue(selectedLead.last_contact_date)}</strong>
+                </div>
+                <div className="detail-field full-width">
+                  <span>Declared need</span>
+                  <strong>{displayValue(selectedLead.declared_need)}</strong>
+                </div>
+                <div className="detail-field full-width">
+                  <span>Follow-up commitment</span>
+                  <strong>
+                    {selectedLead.pending_follow_up.committed ? "Committed" : "No committed follow-up"}
                     {selectedLead.pending_follow_up.due_at
                       ? ` · Due ${selectedLead.pending_follow_up.due_at}`
-                      : &quot;&quot;}
-                  &lt;/strong&gt;
-                &lt;/div&gt;
-              &lt;/div&gt;
+                      : ""}
+                  </strong>
+                </div>
+              </div>
 
-              &lt;div className=&quot;engagement-section&quot;&gt;
-                &lt;h3&gt;Engagement history&lt;/h3&gt;
+              <div className="engagement-section">
+                <h3>Engagement history</h3>
                 {selectedLead.engagement_events.length === 0 ? (
-                  &lt;p className=&quot;muted&quot;&gt;No engagement events recorded.&lt;/p&gt;
+                  <p className="muted">No engagement events recorded.</p>
                 ) : (
-                  &lt;div className=&quot;event-list&quot;&gt;
-                    {selectedLead.engagement_events.map((event, index) =&gt; (
-                      &lt;div className=&quot;event-item&quot; key={`${event.event_type}-${index}`}&gt;
-                        &lt;span className=&quot;event-marker&quot; /&gt;
-                        &lt;div&gt;
-                          &lt;strong&gt;{event.event_type}&lt;/strong&gt;
-                          &lt;p&gt;{event.description || &quot;No additional description&quot;}&lt;/p&gt;
-                          &lt;span&gt;{event.occurred_at}&lt;/span&gt;
-                        &lt;/div&gt;
-                      &lt;/div&gt;
+                  <div className="event-list">
+                    {selectedLead.engagement_events.map((event, index) => (
+                      <div className="event-item" key={`${event.event_type}-${index}`}>
+                        <span className="event-marker" />
+                        <div>
+                          <strong>{event.event_type}</strong>
+                          <p>{event.description || "No additional description"}</p>
+                          <span>{event.occurred_at}</span>
+                        </div>
+                      </div>
                     ))}
-                  &lt;/div&gt;
+                  </div>
                 )}
-              &lt;/div&gt;
+              </div>
 
-              &lt;button
-                className=&quot;run-button&quot;
+              <button
+                className="run-button"
                 onClick={handleRunWorkflow}
                 disabled={running || loading}
-              &gt;
-                {running ? &quot;Executing five agents...&quot; : &quot;Run Prioritization&quot;}
-                {!running &amp;&amp; &lt;span aria-hidden=&quot;true&quot;&gt;→&lt;/span&gt;}
-              &lt;/button&gt;
-              &lt;p className=&quot;button-note&quot;&gt;
+              >
+                {running ? "Executing five agents..." : "Run Prioritization"}
+                {!running && <span aria-hidden="true">→</span>}
+              </button>
+              <p className="button-note">
                 Runs the five-agent workflow against the selected lead record.
-              &lt;/p&gt;
-            &lt;/&gt;
+              </p>
+            </>
           )}
-        &lt;/section&gt;
-      &lt;/div&gt;
+        </section>
+      </div>
 
-      &lt;section className=&quot;results-section&quot;&gt;
-        &lt;div className=&quot;results-heading&quot;&gt;
-          &lt;div&gt;
-            &lt;p className=&quot;eyebrow&quot;&gt;DECISION INTELLIGENCE&lt;/p&gt;
-            &lt;h2&gt;Workflow results&lt;/h2&gt;
-          &lt;/div&gt;
-          &lt;span className={`result-state ${result ? &quot;complete&quot; : &quot;&quot;}`}&gt;
-            {running ? &quot;PROCESSING&quot; : result ? &quot;COMPLETED&quot; : &quot;AWAITING EXECUTION&quot;}
-          &lt;/span&gt;
-        &lt;/div&gt;
+      <section className="results-section">
+        <div className="results-heading">
+          <div>
+            <p className="eyebrow">DECISION INTELLIGENCE</p>
+            <h2>Workflow results</h2>
+          </div>
+          <span className={`result-state ${result ? "complete" : ""}`}>
+            {running ? "PROCESSING" : result ? "COMPLETED" : "AWAITING EXECUTION"}
+          </span>
+        </div>
 
-        {!result &amp;&amp; !running &amp;&amp; (
-          &lt;div className=&quot;empty-results&quot;&gt;
-            &lt;div className=&quot;empty-icon&quot;&gt;◎&lt;/div&gt;
-            &lt;h3&gt;No workflow results yet&lt;/h3&gt;
-            &lt;p&gt;Select a lead and run prioritization to see the recommendation,
-              agent outputs, decision rules and supporting evidence.&lt;/p&gt;
-          &lt;/div&gt;
+        {!result && !running && (
+          <div className="empty-results">
+            <div className="empty-icon">◎</div>
+            <h3>No workflow results yet</h3>
+            <p>Select a lead and run prioritization to see the recommendation,
+              agent outputs, decision rules and supporting evidence.</p>
+          </div>
         )}
 
-        {running &amp;&amp; (
-          &lt;div className=&quot;empty-results&quot;&gt;
-            &lt;div className=&quot;loading-spinner&quot; /&gt;
-            &lt;h3&gt;Analyzing lead information&lt;/h3&gt;
-            &lt;p&gt;The workflow agents are evaluating the selected record.&lt;/p&gt;
-          &lt;/div&gt;
+        {running && (
+          <div className="empty-results">
+            <div className="loading-spinner" />
+            <h3>Analyzing lead information</h3>
+            <p>The workflow agents are evaluating the selected record.</p>
+          </div>
         )}
 
-        {result &amp;&amp; (
-          &lt;div className=&quot;result-content&quot;&gt;
-            &lt;section className=&quot;context-summary&quot;&gt;
-              &lt;div className=&quot;section-title-row&quot;&gt;
-                &lt;div&gt;
-                  &lt;p className=&quot;eyebrow&quot;&gt;CURRENT WORKFLOW RUN&lt;/p&gt;
-                  &lt;h3&gt;Run-scoped shared workflow context&lt;/h3&gt;
-                &lt;/div&gt;
-                &lt;span className=&quot;record-label&quot;&gt;Active run result&lt;/span&gt;
-              &lt;/div&gt;
+        {result && (
+          <div className="result-content">
+            <section className="context-summary">
+              <div className="section-title-row">
+                <div>
+                  <p className="eyebrow">CURRENT WORKFLOW RUN</p>
+                  <h3>Run-scoped shared workflow context</h3>
+                </div>
+                <span className="record-label">Active run result</span>
+              </div>
 
-              &lt;div className=&quot;context-grid&quot;&gt;
-                &lt;div className=&quot;context-item&quot;&gt;
-                  &lt;span&gt;Workflow ID&lt;/span&gt;
-                  &lt;strong&gt;{result.workflow_id}&lt;/strong&gt;
-                &lt;/div&gt;
-                &lt;div className=&quot;context-item&quot;&gt;
-                  &lt;span&gt;Lead ID&lt;/span&gt;
-                  &lt;strong&gt;{result.lead_id}&lt;/strong&gt;
-                &lt;/div&gt;
-                &lt;div className=&quot;context-item&quot;&gt;
-                  &lt;span&gt;Agent results&lt;/span&gt;
-                  &lt;strong&gt;{result.agent_outputs.length}&lt;/strong&gt;
-                &lt;/div&gt;
-                &lt;div className=&quot;context-item&quot;&gt;
-                  &lt;span&gt;Collected evidence&lt;/span&gt;
-                  &lt;strong&gt;{result.evidence.length}&lt;/strong&gt;
-                &lt;/div&gt;
-                &lt;div className=&quot;context-item&quot;&gt;
-                  &lt;span&gt;Workflow errors&lt;/span&gt;
-                  &lt;strong&gt;{result.errors.length}&lt;/strong&gt;
-                &lt;/div&gt;
-                &lt;div className=&quot;context-item&quot;&gt;
-                  &lt;span&gt;Audit reference&lt;/span&gt;
-                  &lt;strong&gt;{result.audit_reference}&lt;/strong&gt;
-                &lt;/div&gt;
-              &lt;/div&gt;
-              &lt;p className=&quot;context-footnote&quot;&gt;
+              <div className="context-grid">
+                <div className="context-item">
+                  <span>Workflow ID</span>
+                  <strong>{result.workflow_id}</strong>
+                </div>
+                <div className="context-item">
+                  <span>Lead ID</span>
+                  <strong>{result.lead_id}</strong>
+                </div>
+                <div className="context-item">
+                  <span>Agent results</span>
+                  <strong>{result.agent_outputs.length}</strong>
+                </div>
+                <div className="context-item">
+                  <span>Collected evidence</span>
+                  <strong>{result.evidence.length}</strong>
+                </div>
+                <div className="context-item">
+                  <span>Workflow errors</span>
+                  <strong>{result.errors.length}</strong>
+                </div>
+                <div className="context-item">
+                  <span>Audit reference</span>
+                  <strong>{result.audit_reference}</strong>
+                </div>
+              </div>
+              <p className="context-footnote">
                 Values above come from the completed workflow response. The
                 context is scoped to this execution and is not persistent memory.
-              &lt;/p&gt;
-            &lt;/section&gt;
+              </p>
+            </section>
 
-            &lt;div className={`recommendation-card ${recommendationClass(result.recommendation)}`}&gt;
-              &lt;div&gt;
-                &lt;span className=&quot;recommendation-label&quot;&gt;FINAL RECOMMENDATION&lt;/span&gt;
-                &lt;h3&gt;{result.recommendation.replaceAll(&quot;_&quot;, &quot; &quot;)}&lt;/h3&gt;
-                &lt;p&gt;Lead: {result.lead_id}&lt;/p&gt;
-              &lt;/div&gt;
-              &lt;div className=&quot;recommendation-symbol&quot;&gt;✓&lt;/div&gt;
-            &lt;/div&gt;
+            <div className={`recommendation-card ${recommendationClass(result.recommendation)}`}>
+              <div>
+                <span className="recommendation-label">FINAL RECOMMENDATION</span>
+                <h3>{result.recommendation.replaceAll("_", " ")}</h3>
+                <p>Lead: {result.lead_id}</p>
+              </div>
+              <div className="recommendation-symbol">✓</div>
+            </div>
 
-            &lt;div className=&quot;result-columns&quot;&gt;
-              &lt;div className=&quot;result-panel&quot;&gt;
-                &lt;h3&gt;Decision reasoning&lt;/h3&gt;
-                {result.reasons.length &gt; 0 ? (
-                  &lt;ul className=&quot;evidence-list&quot;&gt;
-                    {result.reasons.map((reason, index) =&gt; (
-                      &lt;li key={index}&gt;{reason}&lt;/li&gt;
+            <div className="result-columns">
+              <div className="result-panel">
+                <h3>Decision reasoning</h3>
+                {result.reasons.length > 0 ? (
+                  <ul className="evidence-list">
+                    {result.reasons.map((reason, index) => (
+                      <li key={index}>{reason}</li>
                     ))}
-                  &lt;/ul&gt;
+                  </ul>
                 ) : (
-                  &lt;p className=&quot;muted&quot;&gt;No additional reasons returned.&lt;/p&gt;
+                  <p className="muted">No additional reasons returned.</p>
                 )}
 
-                &lt;h3 className=&quot;subheading&quot;&gt;Triggered rules&lt;/h3&gt;
-                &lt;div className=&quot;rule-list&quot;&gt;
-                  {result.triggered_rules.length &gt; 0 ? result.triggered_rules.map((rule) =&gt; (
-                    &lt;span className=&quot;rule-chip&quot; key={rule}&gt;{rule}&lt;/span&gt;
-                  )) : &lt;span className=&quot;muted&quot;&gt;No rules returned.&lt;/span&gt;}
-                &lt;/div&gt;
-              &lt;/div&gt;
+                <h3 className="subheading">Triggered rules</h3>
+                <div className="rule-list">
+                  {result.triggered_rules.length > 0 ? result.triggered_rules.map((rule) => (
+                    <span className="rule-chip" key={rule}>{rule}</span>
+                  )) : <span className="muted">No rules returned.</span>}
+                </div>
+              </div>
 
-              &lt;div className=&quot;result-panel&quot;&gt;
-                &lt;h3&gt;Execution audit&lt;/h3&gt;
-                &lt;div className=&quot;audit-field&quot;&gt;
-                  &lt;span&gt;Workflow ID&lt;/span&gt;
-                  &lt;strong&gt;{result.workflow_id}&lt;/strong&gt;
-                &lt;/div&gt;
-                &lt;div className=&quot;audit-field&quot;&gt;
-                  &lt;span&gt;Audit reference&lt;/span&gt;
-                  &lt;strong&gt;{result.audit_reference}&lt;/strong&gt;
-                &lt;/div&gt;
-                &lt;div className=&quot;audit-field&quot;&gt;
-                  &lt;span&gt;Agent count&lt;/span&gt;
-                  &lt;strong&gt;{result.agent_outputs.length}&lt;/strong&gt;
-                &lt;/div&gt;
-                &lt;div className=&quot;audit-field&quot;&gt;
-                  &lt;span&gt;Priority score&lt;/span&gt;
-                  &lt;strong&gt;{result.priority_score ?? &quot;Not scored&quot;}&lt;/strong&gt;
-                &lt;/div&gt;
-              &lt;/div&gt;
-            &lt;/div&gt;
+              <div className="result-panel">
+                <h3>Execution audit</h3>
+                <div className="audit-field">
+                  <span>Workflow ID</span>
+                  <strong>{result.workflow_id}</strong>
+                </div>
+                <div className="audit-field">
+                  <span>Audit reference</span>
+                  <strong>{result.audit_reference}</strong>
+                </div>
+                <div className="audit-field">
+                  <span>Agent count</span>
+                  <strong>{result.agent_outputs.length}</strong>
+                </div>
+                <div className="audit-field">
+                  <span>Priority score</span>
+                  <strong>{result.priority_score ?? "Not scored"}</strong>
+                </div>
+              </div>
+            </div>
 
-            &lt;div className=&quot;agents-panel&quot;&gt;
-              &lt;div className=&quot;section-title-row&quot;&gt;
-                &lt;div&gt;
-                  &lt;p className=&quot;eyebrow&quot;&gt;MULTI-AGENT EXECUTION&lt;/p&gt;
-                  &lt;h3&gt;Agent activity and structured outputs&lt;/h3&gt;
-                &lt;/div&gt;
-                &lt;span className=&quot;count-badge&quot;&gt;{result.agent_outputs.length} agents&lt;/span&gt;
-              &lt;/div&gt;
+            <div className="agents-panel">
+              <div className="section-title-row">
+                <div>
+                  <p className="eyebrow">MULTI-AGENT EXECUTION</p>
+                  <h3>Agent activity and structured outputs</h3>
+                </div>
+                <span className="count-badge">{result.agent_outputs.length} agents</span>
+              </div>
 
-              &lt;p className=&quot;workflow-intro&quot;&gt;
+              <p className="workflow-intro">
                 Agents are displayed in the actual order returned by the workflow.
                 Each agent contributes results and evidence to the shared context.
-              &lt;/p&gt;
+              </p>
 
-              &lt;div className=&quot;agent-grid&quot;&gt;
-                {result.agent_outputs.map((agent, index) =&gt;
+              <div className="agent-grid">
+                {result.agent_outputs.map((agent, index) =>
                   renderAgentCard(agent, index)
                 )}
-              &lt;/div&gt;
-            &lt;/div&gt;
+              </div>
+            </div>
 
-            &lt;div className=&quot;evidence-panel&quot;&gt;
-              &lt;h3&gt;Consolidated decision evidence&lt;/h3&gt;
-              {result.evidence.length &gt; 0 ? (
-                &lt;ul className=&quot;evidence-list&quot;&gt;
-                  {result.evidence.map((item, index) =&gt; (
-                    &lt;li key={index}&gt;{item}&lt;/li&gt;
+            <div className="evidence-panel">
+              <h3>Consolidated decision evidence</h3>
+              {result.evidence.length > 0 ? (
+                <ul className="evidence-list">
+                  {result.evidence.map((item, index) => (
+                    <li key={index}>{item}</li>
                   ))}
-                &lt;/ul&gt;
+                </ul>
               ) : (
-                &lt;p className=&quot;muted&quot;&gt;No consolidated evidence returned.&lt;/p&gt;
+                <p className="muted">No consolidated evidence returned.</p>
               )}
-            &lt;/div&gt;
+            </div>
 
-            &lt;section className=&quot;audit-inspector&quot;&gt;
-              &lt;div className=&quot;section-title-row&quot;&gt;
-                &lt;div&gt;
-                  &lt;p className=&quot;eyebrow&quot;&gt;RETRIEVABLE RECORD&lt;/p&gt;
-                  &lt;h3&gt;Stored workflow audit&lt;/h3&gt;
-                  &lt;p className=&quot;muted&quot;&gt;
+            <section className="audit-inspector">
+              <div className="section-title-row">
+                <div>
+                  <p className="eyebrow">RETRIEVABLE RECORD</p>
+                  <h3>Stored workflow audit</h3>
+                  <p className="muted">
                     Retrieve the saved execution record using its audit reference.
-                  &lt;/p&gt;
-                &lt;/div&gt;
-                &lt;button
-                  className=&quot;audit-button&quot;
+                  </p>
+                </div>
+                <button
+                  className="audit-button"
                   onClick={handleLoadAudit}
                   disabled={auditLoading}
-                &gt;
-                  {auditLoading ? &quot;Retrieving...&quot; : &quot;Retrieve audit record&quot;}
-                &lt;/button&gt;
-              &lt;/div&gt;
+                >
+                  {auditLoading ? "Retrieving..." : "Retrieve audit record"}
+                </button>
+              </div>
 
-              {auditError &amp;&amp; &lt;div className=&quot;error-banner&quot;&gt;{auditError}&lt;/div&gt;}
+              {auditError && <div className="error-banner">{auditError}</div>}
 
-              {auditRecord &amp;&amp; (
-                &lt;div className=&quot;audit-record-content&quot;&gt;
-                  &lt;div className=&quot;audit-record-status&quot;&gt;Audit record retrieved successfully&lt;/div&gt;
-                  &lt;div className=&quot;context-grid&quot;&gt;
-                    &lt;div className=&quot;context-item&quot;&gt;
-                      &lt;span&gt;Audit reference&lt;/span&gt;
-                      &lt;strong&gt;{auditRecord.audit_reference}&lt;/strong&gt;
-                    &lt;/div&gt;
-                    &lt;div className=&quot;context-item&quot;&gt;
-                      &lt;span&gt;Execution timestamp (UTC)&lt;/span&gt;
-                      &lt;strong&gt;{auditRecord.execution_timestamp}&lt;/strong&gt;
-                    &lt;/div&gt;
-                    &lt;div className=&quot;context-item&quot;&gt;
-                      &lt;span&gt;Final recommendation&lt;/span&gt;
-                      &lt;strong&gt;{auditRecord.final_recommendation}&lt;/strong&gt;
-                    &lt;/div&gt;
-                    &lt;div className=&quot;context-item&quot;&gt;
-                      &lt;span&gt;Recorded agent sequence&lt;/span&gt;
-                      &lt;strong&gt;{auditRecord.agent_execution_sequence.length} agents&lt;/strong&gt;
-                    &lt;/div&gt;
-                  &lt;/div&gt;
+              {auditRecord && (
+                <div className="audit-record-content">
+                  <div className="audit-record-status">Audit record retrieved successfully</div>
+                  <div className="context-grid">
+                    <div className="context-item">
+                      <span>Audit reference</span>
+                      <strong>{auditRecord.audit_reference}</strong>
+                    </div>
+                    <div className="context-item">
+                      <span>Execution timestamp (UTC)</span>
+                      <strong>{auditRecord.execution_timestamp}</strong>
+                    </div>
+                    <div className="context-item">
+                      <span>Final recommendation</span>
+                      <strong>{auditRecord.final_recommendation}</strong>
+                    </div>
+                    <div className="context-item">
+                      <span>Recorded agent sequence</span>
+                      <strong>{auditRecord.agent_execution_sequence.length} agents</strong>
+                    </div>
+                  </div>
 
-                  &lt;h4&gt;Recorded execution sequence&lt;/h4&gt;
-                  &lt;ol className=&quot;audit-sequence&quot;&gt;
-                    {auditRecord.agent_execution_sequence.map((name, index) =&gt; (
-                      &lt;li key={`${name}-${index}`}&gt;{name}&lt;/li&gt;
+                  <h4>Recorded execution sequence</h4>
+                  <ol className="audit-sequence">
+                    {auditRecord.agent_execution_sequence.map((name, index) => (
+                      <li key={`${name}-${index}`}>{name}</li>
                     ))}
-                  &lt;/ol&gt;
+                  </ol>
 
-                  &lt;h4&gt;Stored audit data&lt;/h4&gt;
-                  &lt;pre className=&quot;audit-json&quot;&gt;
+                  <h4>Stored audit data</h4>
+                  <pre className="audit-json">
                     {JSON.stringify(auditRecord, null, 2)}
-                  &lt;/pre&gt;
-                &lt;/div&gt;
+                  </pre>
+                </div>
               )}
 
-              &lt;p className=&quot;context-footnote&quot;&gt;
+              <p className="context-footnote">
                 Audit storage is currently in memory. Records are available while
                 the backend process remains running and are cleared when it restarts.
-              &lt;/p&gt;
-            &lt;/section&gt;
+              </p>
+            </section>
 
-            {result.errors.length &gt; 0 &amp;&amp; (
-              &lt;div className=&quot;error-banner&quot;&gt;
-                {result.errors.map((item, index) =&gt; &lt;p key={index}&gt;{item}&lt;/p&gt;)}
-              &lt;/div&gt;
+            {result.errors.length > 0 && (
+              <div className="error-banner">
+                {result.errors.map((item, index) => <p key={index}>{item}</p>)}
+              </div>
             )}
-          &lt;/div&gt;
+          </div>
         )}
-      &lt;/section&gt;
+      </section>
 
-      &lt;footer className=&quot;footer&quot;&gt;
-        &lt;span&gt;AA007 · Lead Follow-up Prioritization Intelligence&lt;/span&gt;
-        &lt;span&gt;Phase 1.2 · Explainable deterministic agent workflow&lt;/span&gt;
-      &lt;/footer&gt;
-    &lt;/main&gt;
+      <footer className="footer">
+        <span>AA007 · Lead Follow-up Prioritization Intelligence</span>
+        <span>Phase 1.2 · Explainable deterministic agent workflow</span>
+      </footer>
+    </main>
   );
 }
 
-export default App;</file><file path="frontend/src/index.css">:root {
-  font-family: Inter, &quot;Segoe UI&quot;, Arial, sans-serif;
-  color: #26364d;
-  background: #f4f7fb;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
+export default App;
+</file>
 
-* {
-  box-sizing: border-box;
-}
-
-html {
-  min-width: 320px;
-  min-height: 100%;
-}
-
-body {
-  min-width: 320px;
-  min-height: 100vh;
-  margin: 0;
-  background: #f4f7fb;
-}
-
-button {
-  font: inherit;
-}
-
-button:focus-visible {
-  outline: 3px solid #8bb4e5;
-  outline-offset: 3px;
-}
-
-#root {
-  min-height: 100vh;
-}</file><file path="frontend/src/main.tsx">import { StrictMode } from &apos;react&apos;
-import { createRoot } from &apos;react-dom/client&apos;
-import &apos;./index.css&apos;
-import App from &apos;./App.tsx&apos;
-
-createRoot(document.getElementById(&apos;root&apos;)!).render(
-  &lt;StrictMode&gt;
-    &lt;App /&gt;
-  &lt;/StrictMode&gt;,
-)</file><file path="frontend/.gitignore"># Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-node_modules
-dist
-dist-ssr
-*.local
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?</file><file path="frontend/.oxlintrc.json">{
-  &quot;$schema&quot;: &quot;./node_modules/oxlint/configuration_schema.json&quot;,
-  &quot;plugins&quot;: [&quot;react&quot;, &quot;typescript&quot;, &quot;oxc&quot;],
-  &quot;rules&quot;: {
-    &quot;react/rules-of-hooks&quot;: &quot;error&quot;,
-    &quot;react/only-export-components&quot;: [&quot;warn&quot;, { &quot;allowConstantExport&quot;: true }]
-  }
-}</file><file path="frontend/index.html">&lt;!doctype html&gt;
-&lt;html lang=&quot;en&quot;&gt;
-  &lt;head&gt;
-    &lt;meta charset=&quot;UTF-8&quot; /&gt;
-    &lt;link rel=&quot;icon&quot; type=&quot;image/svg+xml&quot; href=&quot;/favicon.svg&quot; /&gt;
-    &lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1.0&quot; /&gt;
-    &lt;title&gt;frontend&lt;/title&gt;
-  &lt;/head&gt;
-  &lt;body&gt;
-    &lt;div id=&quot;root&quot;&gt;&lt;/div&gt;
-    &lt;script type=&quot;module&quot; src=&quot;/src/main.tsx&quot;&gt;&lt;/script&gt;
-  &lt;/body&gt;
-&lt;/html&gt;</file><file path="frontend/package.json">{
-  &quot;name&quot;: &quot;frontend&quot;,
-  &quot;private&quot;: true,
-  &quot;version&quot;: &quot;0.0.0&quot;,
-  &quot;type&quot;: &quot;module&quot;,
-  &quot;scripts&quot;: {
-    &quot;dev&quot;: &quot;vite&quot;,
-    &quot;build&quot;: &quot;tsc -b &amp;&amp; vite build&quot;,
-    &quot;lint&quot;: &quot;oxlint&quot;,
-    &quot;preview&quot;: &quot;vite preview&quot;
-  },
-  &quot;dependencies&quot;: {
-    &quot;react&quot;: &quot;^19.3.1&quot;,
-    &quot;react-dom&quot;: &quot;^19.3.1&quot;
-  },
-  &quot;devDependencies&quot;: {
-    &quot;@types/node&quot;: &quot;^24.19.2&quot;,
-    &quot;@types/react&quot;: &quot;^19.3.0&quot;,
-    &quot;@types/react-dom&quot;: &quot;^19.3.0&quot;,
-    &quot;@vitejs/plugin-react&quot;: &quot;^6.1.2&quot;,
-    &quot;oxlint&quot;: &quot;^1.90.0&quot;,
-    &quot;typescript&quot;: &quot;~7.0.2&quot;,
-    &quot;vite&quot;: &quot;^8.3.6&quot;
-  }
-}</file><file path="frontend/README.md"># React + TypeScript + Vite
-
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
-
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev &amp; build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  &quot;$schema&quot;: &quot;./node_modules/oxlint/configuration_schema.json&quot;,
-  &quot;plugins&quot;: [&quot;react&quot;, &quot;typescript&quot;, &quot;oxc&quot;],
-  &quot;options&quot;: {
-    &quot;typeAware&quot;: true
-  },
-  &quot;rules&quot;: {
-    &quot;react/rules-of-hooks&quot;: &quot;error&quot;,
-    &quot;react/only-export-components&quot;: [&quot;warn&quot;, { &quot;allowConstantExport&quot;: true }]
-  }
-}
-```
-
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.</file><file path="frontend/tsconfig.app.json">{
-  &quot;compilerOptions&quot;: {
-    &quot;tsBuildInfoFile&quot;: &quot;./node_modules/.tmp/tsconfig.app.tsbuildinfo&quot;,
-    &quot;target&quot;: &quot;es2023&quot;,
-    &quot;lib&quot;: [&quot;ES2023&quot;, &quot;DOM&quot;],
-    &quot;module&quot;: &quot;esnext&quot;,
-    &quot;types&quot;: [&quot;vite/client&quot;],
-    &quot;allowArbitraryExtensions&quot;: true,
-    &quot;skipLibCheck&quot;: true,
-
-    /* Bundler mode */
-    &quot;moduleResolution&quot;: &quot;bundler&quot;,
-    &quot;allowImportingTsExtensions&quot;: true,
-    &quot;verbatimModuleSyntax&quot;: true,
-    &quot;moduleDetection&quot;: &quot;force&quot;,
-    &quot;noEmit&quot;: true,
-    &quot;jsx&quot;: &quot;react-jsx&quot;,
-
-    /* Linting */
-    &quot;noUnusedLocals&quot;: true,
-    &quot;noUnusedParameters&quot;: true,
-    &quot;erasableSyntaxOnly&quot;: true,
-    &quot;noFallthroughCasesInSwitch&quot;: true
-  },
-  &quot;include&quot;: [&quot;src&quot;]
-}</file><file path="frontend/tsconfig.json">{
-  &quot;files&quot;: [],
-  &quot;references&quot;: [
-    { &quot;path&quot;: &quot;./tsconfig.app.json&quot; },
-    { &quot;path&quot;: &quot;./tsconfig.node.json&quot; }
-  ]
-}</file><file path="frontend/tsconfig.node.json">{
-  &quot;compilerOptions&quot;: {
-    &quot;tsBuildInfoFile&quot;: &quot;./node_modules/.tmp/tsconfig.node.tsbuildinfo&quot;,
-    &quot;target&quot;: &quot;es2023&quot;,
-    &quot;lib&quot;: [&quot;ES2023&quot;],
-    &quot;types&quot;: [&quot;node&quot;],
-    &quot;skipLibCheck&quot;: true,
-
-    /* Bundler mode */
-    &quot;module&quot;: &quot;nodenext&quot;,
-    &quot;allowImportingTsExtensions&quot;: true,
-    &quot;verbatimModuleSyntax&quot;: true,
-    &quot;moduleDetection&quot;: &quot;force&quot;,
-    &quot;noEmit&quot;: true,
-
-    /* Linting */
-    &quot;noUnusedLocals&quot;: true,
-    &quot;noUnusedParameters&quot;: true,
-    &quot;erasableSyntaxOnly&quot;: true,
-    &quot;noFallthroughCasesInSwitch&quot;: true
-  },
-  &quot;include&quot;: [&quot;vite.config.ts&quot;]
-}</file><file path="frontend/vite.config.ts">import react from &apos;@vitejs/plugin-react&apos;
-import { defineConfig } from &apos;vite&apos;
-
-// https://vite.dev/config/
-export default defineConfig({
-  plugins: [react()],
-})</file><file path=".gitignore"># Python
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-
-# Virtual environments
-.venv/
-venv/
-env/
-ENV/
-
-# Testing and coverage
-.pytest_cache/
-.coverage
-htmlcov/
-
-# Environment variables and secrets
-.env
-.env.*
-!.env.example
-
-# Logs
-*.log
-
-# Node and frontend
-node_modules/
-dist/
-build/
-.vite/
-
-# IDE and operating system
-.vscode/
-.idea/
-.DS_Store
-Thumbs.db
-
-# Temporary files
-*.tmp
-*.bak</file><file path="backend/app/services/workflow_service.py">from app.agents.lead_intake_agent import LeadIntakeAgent
-from app.agents.recency_agent import RecencyAgent
-from app.agents.engagement_agent import EngagementAgent
-from app.agents.fit_sla_agent import FitSlaAgent
-from app.agents.decision_agent import LeadPriorityDecisionAgent
-
-from app.models.schemas import WorkflowRequest, WorkflowResponse
-from app.services.context_builder import ContextBuilder
-from app.services.audit_service import audit_service
-
-
-class LeadWorkflowService:
-    &quot;&quot;&quot;Execute the complete AA007 lead-prioritization workflow.&quot;&quot;&quot;
-
-    def __init__(self):
-        self.agents = [
-            LeadIntakeAgent(),
-            RecencyAgent(),
-            EngagementAgent(),
-            FitSlaAgent(),
-            LeadPriorityDecisionAgent(),
-        ]
-
-    def run(self, request: WorkflowRequest) -&gt; WorkflowResponse:
-        context = ContextBuilder.build(request.lead)
-
-        # Execute all five agents in sequence.
-        for agent in self.agents:
-            agent.run(context)
-
-        decision = context.agent_results[-1]
-        details = decision.details
-
-        recommendation = details.get(&quot;recommendation&quot;) or &quot;REQUEST_DATA&quot;
-        reasons = details.get(&quot;reasons&quot;, [])
-        triggered_rules = details.get(&quot;triggered_rules&quot;, [])
-
-        # Save the actual workflow audit record.
-        audit_reference = audit_service.record_workflow(
-            workflow_id=context.workflow_id,
-            lead_id=context.lead.lead_id,
-            agent_outputs=context.agent_results,
-            triggered_rules=triggered_rules,
-            recommendation=recommendation,
-            errors=context.errors,
-        )
-
-        return WorkflowResponse(
-            workflow_id=context.workflow_id,
-            lead_id=context.lead.lead_id,
-            recommendation=recommendation,
-            priority_score=decision.score,
-            reasons=reasons,
-            triggered_rules=triggered_rules,
-            agent_outputs=context.agent_results,
-            evidence=context.evidence,
-            audit_reference=audit_reference,
-            errors=context.errors,
-        )</file><file path="backend/app/main.py">from fastapi import FastAPI, HTTPException
+<file path="backend/app/main.py">
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.data.seed_leads import get_seed_leads
@@ -3100,63 +3512,67 @@ from app.services.audit_service import audit_service
 
 
 app = FastAPI(
-    title=&quot;AA007 - Lead Follow-up Prioritization Intelligence&quot;,
-    description=&quot;Deterministic agentic AI MVP for lead follow-up prioritization.&quot;,
-    version=&quot;0.1.0&quot;,
+    title="AA007 - Lead Follow-up Prioritization Intelligence",
+    description="Deterministic agentic AI MVP for lead follow-up prioritization.",
+    version="0.1.0",
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[&quot;http://127.0.0.1:5173&quot;],
+    allow_origins=["http://127.0.0.1:5173"],
     allow_credentials=True,
-    allow_methods=[&quot;*&quot;],
-    allow_headers=[&quot;*&quot;],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 workflow_service = LeadWorkflowService()
 
 
-@app.get(&quot;/&quot;)
+@app.get("/")
 def root():
     return {
-        &quot;project&quot;: &quot;AA007 - Lead Follow-up Prioritization Intelligence&quot;,
-        &quot;status&quot;: &quot;running&quot;,
-        &quot;message&quot;: &quot;Welcome to the AA007 API&quot;,
+        "project": "AA007 - Lead Follow-up Prioritization Intelligence",
+        "status": "running",
+        "message": "Welcome to the AA007 API",
     }
 
 
-@app.get(&quot;/health&quot;)
+@app.get("/health")
 def health_check():
     return {
-        &quot;status&quot;: &quot;healthy&quot;,
-        &quot;service&quot;: &quot;AA007 Backend&quot;,
+        "status": "healthy",
+        "service": "AA007 Backend",
     }
 
 
-@app.get(&quot;/leads&quot;, response_model=list[LeadRecord])
+@app.get("/leads", response_model=list[LeadRecord])
 def list_leads():
-    &quot;&quot;&quot;Return the seeded sample leads.&quot;&quot;&quot;
+    """Return the seeded sample leads."""
     return get_seed_leads()
 
 
-@app.post(&quot;/workflow/run&quot;, response_model=WorkflowResponse)
+@app.post("/workflow/run", response_model=WorkflowResponse)
 def run_lead_workflow(request: WorkflowRequest):
-    &quot;&quot;&quot;Execute all five agents and return the lead decision.&quot;&quot;&quot;
+    """Execute all five agents and return the lead decision."""
     return workflow_service.run(request)
 
 
-@app.get(&quot;/audit/{audit_reference}&quot;)
+@app.get("/audit/{audit_reference}")
 def get_audit_record(audit_reference: str):
-    &quot;&quot;&quot;Retrieve an actual stored workflow audit record.&quot;&quot;&quot;
+    """Retrieve an actual stored workflow audit record."""
     record = audit_service.get_audit_record(audit_reference)
 
     if record is None:
         raise HTTPException(
             status_code=404,
-            detail=&quot;Audit record not found.&quot;,
+            detail="Audit record not found.",
         )
 
-    return record</file><file path="backend/tests/test_health.py">from datetime import date, datetime, timedelta, timezone
+    return record
+</file>
+
+<file path="backend/tests/test_health.py">
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
 
@@ -3177,103 +3593,103 @@ client = TestClient(app)
 
 
 def test_root_endpoint():
-    response = client.get(&quot;/&quot;)
+    response = client.get("/")
 
     assert response.status_code == 200
 
     data = response.json()
 
-    assert data[&quot;status&quot;] == &quot;running&quot;
-    assert data[&quot;project&quot;] == (
-        &quot;AA007 - Lead Follow-up Prioritization Intelligence&quot;
+    assert data["status"] == "running"
+    assert data["project"] == (
+        "AA007 - Lead Follow-up Prioritization Intelligence"
     )
 
 
 def test_health_endpoint():
-    response = client.get(&quot;/health&quot;)
+    response = client.get("/health")
 
     assert response.status_code == 200
 
     data = response.json()
 
-    assert data[&quot;status&quot;] == &quot;healthy&quot;
-    assert data[&quot;service&quot;] == &quot;AA007 Backend&quot;
+    assert data["status"] == "healthy"
+    assert data["service"] == "AA007 Backend"
 
 
 def test_hot_seed_lead_follow_up_now():
     lead = next(
         item for item in get_seed_leads()
-        if item.lead_id == &quot;AA007-HOT-001&quot;
+        if item.lead_id == "AA007-HOT-001"
     )
 
     result = LeadWorkflowService().run(WorkflowRequest(lead=lead))
 
-    assert result.recommendation == &quot;FOLLOW_UP_NOW&quot;
-    assert &quot;AA007-RULE-02&quot; in result.triggered_rules
+    assert result.recommendation == "FOLLOW_UP_NOW"
+    assert "AA007-RULE-02" in result.triggered_rules
 
 
 def test_warm_seed_lead_follow_up_soon():
     lead = next(
         item for item in get_seed_leads()
-        if item.lead_id == &quot;AA007-WARM-001&quot;
+        if item.lead_id == "AA007-WARM-001"
     )
 
     result = LeadWorkflowService().run(WorkflowRequest(lead=lead))
 
-    assert result.recommendation == &quot;FOLLOW_UP_SOON&quot;
-    assert &quot;AA007-RULE-05&quot; in result.triggered_rules
+    assert result.recommendation == "FOLLOW_UP_SOON"
+    assert "AA007-RULE-05" in result.triggered_rules
 
 
 def test_stale_seed_lead_nurture():
     lead = next(
         item for item in get_seed_leads()
-        if item.lead_id == &quot;AA007-STALE-001&quot;
+        if item.lead_id == "AA007-STALE-001"
     )
 
     result = LeadWorkflowService().run(WorkflowRequest(lead=lead))
 
-    assert result.recommendation == &quot;NURTURE&quot;
-    assert &quot;AA007-RULE-04&quot; in result.triggered_rules
+    assert result.recommendation == "NURTURE"
+    assert "AA007-RULE-04" in result.triggered_rules
 
 
 def test_missing_mandatory_data_requests_data():
     lead = LeadRecord(
-        lead_id=&quot;AA007-MISSING-001&quot;,
+        lead_id="AA007-MISSING-001",
         contact=None,
-        source=&quot;Website&quot;,
+        source="Website",
         age_days=2,
         last_contact_date=date.today(),
-        declared_fit=&quot;HIGH&quot;,
+        declared_fit="HIGH",
         stage=LeadStage.NEW,
     )
 
     result = LeadWorkflowService().run(WorkflowRequest(lead=lead))
 
-    assert result.recommendation == &quot;REQUEST_DATA&quot;
-    assert &quot;AA007-RULE-01&quot; in result.triggered_rules
+    assert result.recommendation == "REQUEST_DATA"
+    assert "AA007-RULE-01" in result.triggered_rules
 
 
 def test_high_fit_recent_engagement_triggers_rule_03():
     today = date.today()
 
     lead = LeadRecord(
-        lead_id=&quot;AA007-HIGH-FIT-001&quot;,
+        lead_id="AA007-HIGH-FIT-001",
         contact=ContactDetails(
-            name=&quot;Test Lead&quot;,
-            email=&quot;test@example.com&quot;,
+            name="Test Lead",
+            email="test@example.com",
         ),
-        source=&quot;Website&quot;,
+        source="Website",
         age_days=2,
         last_contact_date=today,
         engagement_events=[
             EngagementEvent(
-                event_type=&quot;EMAIL_REPLY&quot;,
+                event_type="EMAIL_REPLY",
                 occurred_at=today,
-                description=&quot;Recent positive engagement&quot;,
+                description="Recent positive engagement",
             ),
         ],
-        declared_need=&quot;Interested in a product demonstration&quot;,
-        declared_fit=&quot;HIGH&quot;,
+        declared_need="Interested in a product demonstration",
+        declared_fit="HIGH",
         stage=LeadStage.CONTACTED,
         pending_follow_up=PendingFollowUp(
             committed=False,
@@ -3282,8 +3698,8 @@ def test_high_fit_recent_engagement_triggers_rule_03():
 
     result = LeadWorkflowService().run(WorkflowRequest(lead=lead))
 
-    assert result.recommendation == &quot;FOLLOW_UP_NOW&quot;
-    assert &quot;AA007-RULE-03&quot; in result.triggered_rules
+    assert result.recommendation == "FOLLOW_UP_NOW"
+    assert "AA007-RULE-03" in result.triggered_rules
 
 
 def test_workflow_executes_all_five_agents():
@@ -3292,11 +3708,11 @@ def test_workflow_executes_all_five_agents():
     result = LeadWorkflowService().run(WorkflowRequest(lead=lead))
 
     expected_agents = {
-        &quot;Lead Intake Agent&quot;,
-        &quot;Recency Agent&quot;,
-        &quot;Engagement Agent&quot;,
-        &quot;Fit &amp; SLA Agent&quot;,
-        &quot;Lead Priority Decision Agent&quot;,
+        "Lead Intake Agent",
+        "Recency Agent",
+        "Engagement Agent",
+        "Fit & SLA Agent",
+        "Lead Priority Decision Agent",
     }
 
     actual_agents = {
@@ -3315,15 +3731,15 @@ def test_workflow_generates_unique_audit_reference():
     second = service.run(WorkflowRequest(lead=lead))
 
     assert first.workflow_id != second.workflow_id
-    assert first.audit_reference == f&quot;AUDIT-{first.workflow_id}&quot;
-    assert second.audit_reference == f&quot;AUDIT-{second.workflow_id}&quot;
+    assert first.audit_reference == f"AUDIT-{first.workflow_id}"
+    assert second.audit_reference == f"AUDIT-{second.workflow_id}"
 
 
 def test_workflow_api_returns_complete_result():
     response = client.post(
-        &quot;/workflow/run&quot;,
+        "/workflow/run",
         json={
-            &quot;lead&quot;: get_seed_leads()[0].model_dump(mode=&quot;json&quot;)
+            "lead": get_seed_leads()[0].model_dump(mode="json")
         },
     )
 
@@ -3331,70 +3747,73 @@ def test_workflow_api_returns_complete_result():
 
     data = response.json()
 
-    assert data[&quot;recommendation&quot;] == &quot;FOLLOW_UP_NOW&quot;
-    assert len(data[&quot;agent_outputs&quot;]) == 5
-    assert len(data[&quot;evidence&quot;]) &gt; 0
-    assert data[&quot;audit_reference&quot;].startswith(&quot;AUDIT-&quot;)
+    assert data["recommendation"] == "FOLLOW_UP_NOW"
+    assert len(data["agent_outputs"]) == 5
+    assert len(data["evidence"]) > 0
+    assert data["audit_reference"].startswith("AUDIT-")
 
 
 def test_workflow_audit_record_is_retrievable():
     response = client.post(
-        &quot;/workflow/run&quot;,
+        "/workflow/run",
         json={
-            &quot;lead&quot;: get_seed_leads()[0].model_dump(mode=&quot;json&quot;)
+            "lead": get_seed_leads()[0].model_dump(mode="json")
         },
     )
 
     assert response.status_code == 200
 
     workflow_data = response.json()
-    audit_reference = workflow_data[&quot;audit_reference&quot;]
+    audit_reference = workflow_data["audit_reference"]
 
-    audit_response = client.get(f&quot;/audit/{audit_reference}&quot;)
+    audit_response = client.get(f"/audit/{audit_reference}")
 
     assert audit_response.status_code == 200
 
     audit_data = audit_response.json()
 
-    assert audit_data[&quot;audit_reference&quot;] == audit_reference
-    assert audit_data[&quot;workflow_id&quot;] == workflow_data[&quot;workflow_id&quot;]
-    assert audit_data[&quot;lead_id&quot;] == workflow_data[&quot;lead_id&quot;]
-    assert audit_data[&quot;final_recommendation&quot;] == workflow_data[&quot;recommendation&quot;]
-    assert len(audit_data[&quot;agent_execution_sequence&quot;]) == 5
-    assert len(audit_data[&quot;agent_outputs&quot;]) == 5
-    assert isinstance(audit_data[&quot;execution_timestamp&quot;], str)
-    assert isinstance(audit_data[&quot;triggered_rules&quot;], list)
-    assert isinstance(audit_data[&quot;errors&quot;], list)
+    assert audit_data["audit_reference"] == audit_reference
+    assert audit_data["workflow_id"] == workflow_data["workflow_id"]
+    assert audit_data["lead_id"] == workflow_data["lead_id"]
+    assert audit_data["final_recommendation"] == workflow_data["recommendation"]
+    assert len(audit_data["agent_execution_sequence"]) == 5
+    assert len(audit_data["agent_outputs"]) == 5
+    assert isinstance(audit_data["execution_timestamp"], str)
+    assert isinstance(audit_data["triggered_rules"], list)
+    assert isinstance(audit_data["errors"], list)
 
 
 def test_audit_record_contains_all_five_agents_in_order():
     response = client.post(
-        &quot;/workflow/run&quot;,
+        "/workflow/run",
         json={
-            &quot;lead&quot;: get_seed_leads()[0].model_dump(mode=&quot;json&quot;)
+            "lead": get_seed_leads()[0].model_dump(mode="json")
         },
     )
 
-    audit_reference = response.json()[&quot;audit_reference&quot;]
-    audit_response = client.get(f&quot;/audit/{audit_reference}&quot;)
+    audit_reference = response.json()["audit_reference"]
+    audit_response = client.get(f"/audit/{audit_reference}")
 
     assert audit_response.status_code == 200
 
     audit_data = audit_response.json()
 
     expected_sequence = [
-        &quot;Lead Intake Agent&quot;,
-        &quot;Recency Agent&quot;,
-        &quot;Engagement Agent&quot;,
-        &quot;Fit &amp; SLA Agent&quot;,
-        &quot;Lead Priority Decision Agent&quot;,
+        "Lead Intake Agent",
+        "Recency Agent",
+        "Engagement Agent",
+        "Fit & SLA Agent",
+        "Lead Priority Decision Agent",
     ]
 
-    assert audit_data[&quot;agent_execution_sequence&quot;] == expected_sequence
+    assert audit_data["agent_execution_sequence"] == expected_sequence
 
 
 def test_unknown_audit_reference_returns_404():
-    response = client.get(&quot;/audit/AUDIT-NOT-FOUND&quot;)
+    response = client.get("/audit/AUDIT-NOT-FOUND")
 
     assert response.status_code == 404
-    assert response.json()[&quot;detail&quot;] == &quot;Audit record not found.&quot;</file></files></repomix>
+    assert response.json()["detail"] == "Audit record not found."
+</file>
+
+</files>
