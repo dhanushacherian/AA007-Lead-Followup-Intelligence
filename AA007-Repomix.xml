@@ -71,72 +71,7 @@ frontend/
   tsconfig.json
   tsconfig.node.json
   vite.config.ts
-.gitignore</directory_structure><files>This section contains the contents of the repository&apos;s files.<file path="backend/app/services/audit_service.py">from copy import deepcopy
-from datetime import datetime, timezone
-from threading import RLock
-from typing import Any
-
-from app.models.schemas import AgentResult
-
-
-class AuditService:
-    &quot;&quot;&quot;Store and retrieve workflow audit records in memory.&quot;&quot;&quot;
-
-    def __init__(self):
-        self._records: dict[str, dict[str, Any]] = {}
-        self._lock = RLock()
-
-    def record_workflow(
-        self,
-        workflow_id: str,
-        lead_id: str,
-        agent_outputs: list[AgentResult],
-        triggered_rules: list[str],
-        recommendation: str,
-        errors: list[str],
-    ) -&gt; str:
-        &quot;&quot;&quot;Save a completed workflow and return its audit reference.&quot;&quot;&quot;
-
-        audit_reference = f&quot;AUDIT-{workflow_id}&quot;
-
-        record = {
-            &quot;audit_reference&quot;: audit_reference,
-            &quot;workflow_id&quot;: workflow_id,
-            &quot;lead_id&quot;: lead_id,
-            &quot;execution_timestamp&quot;: datetime.now(timezone.utc).isoformat(),
-            &quot;agent_execution_sequence&quot;: [
-                agent.agent_name for agent in agent_outputs
-            ],
-            &quot;agent_outputs&quot;: [
-                agent.model_dump(mode=&quot;json&quot;)
-                for agent in agent_outputs
-            ],
-            &quot;triggered_rules&quot;: list(triggered_rules),
-            &quot;final_recommendation&quot;: recommendation,
-            &quot;errors&quot;: list(errors),
-        }
-
-        with self._lock:
-            self._records[audit_reference] = record
-
-        return audit_reference
-
-    def get_audit_record(
-        self,
-        audit_reference: str,
-    ) -&gt; dict[str, Any] | None:
-        &quot;&quot;&quot;Retrieve a stored audit record by its reference.&quot;&quot;&quot;
-
-        with self._lock:
-            record = self._records.get(audit_reference)
-
-            if record is None:
-                return None
-
-            return deepcopy(record)
-
-
-audit_service = AuditService()</file><file path="backend/app/agents/__init__.py"></file><file path="backend/app/agents/common.py">from app.models.schemas import AgentResult
+.gitignore</directory_structure><files>This section contains the contents of the repository&apos;s files.<file path="backend/app/agents/__init__.py"></file><file path="backend/app/agents/common.py">from app.models.schemas import AgentResult
 from app.services.workflow_context import WorkflowContext
 
 
@@ -644,7 +579,72 @@ class WorkflowResponse(BaseModel):
     agent_outputs: list[AgentResult] = Field(default_factory=list)
     evidence: list[str] = Field(default_factory=list)
     audit_reference: str
-    errors: list[str] = Field(default_factory=list)</file><file path="backend/app/services/__init__.py"></file><file path="backend/app/services/context_builder.py">from app.models.schemas import LeadRecord
+    errors: list[str] = Field(default_factory=list)</file><file path="backend/app/services/__init__.py"></file><file path="backend/app/services/audit_service.py">from copy import deepcopy
+from datetime import datetime, timezone
+from threading import RLock
+from typing import Any
+
+from app.models.schemas import AgentResult
+
+
+class AuditService:
+    &quot;&quot;&quot;Store and retrieve workflow audit records in memory.&quot;&quot;&quot;
+
+    def __init__(self):
+        self._records: dict[str, dict[str, Any]] = {}
+        self._lock = RLock()
+
+    def record_workflow(
+        self,
+        workflow_id: str,
+        lead_id: str,
+        agent_outputs: list[AgentResult],
+        triggered_rules: list[str],
+        recommendation: str,
+        errors: list[str],
+    ) -&gt; str:
+        &quot;&quot;&quot;Save a completed workflow and return its audit reference.&quot;&quot;&quot;
+
+        audit_reference = f&quot;AUDIT-{workflow_id}&quot;
+
+        record = {
+            &quot;audit_reference&quot;: audit_reference,
+            &quot;workflow_id&quot;: workflow_id,
+            &quot;lead_id&quot;: lead_id,
+            &quot;execution_timestamp&quot;: datetime.now(timezone.utc).isoformat(),
+            &quot;agent_execution_sequence&quot;: [
+                agent.agent_name for agent in agent_outputs
+            ],
+            &quot;agent_outputs&quot;: [
+                agent.model_dump(mode=&quot;json&quot;)
+                for agent in agent_outputs
+            ],
+            &quot;triggered_rules&quot;: list(triggered_rules),
+            &quot;final_recommendation&quot;: recommendation,
+            &quot;errors&quot;: list(errors),
+        }
+
+        with self._lock:
+            self._records[audit_reference] = record
+
+        return audit_reference
+
+    def get_audit_record(
+        self,
+        audit_reference: str,
+    ) -&gt; dict[str, Any] | None:
+        &quot;&quot;&quot;Retrieve a stored audit record by its reference.&quot;&quot;&quot;
+
+        with self._lock:
+            record = self._records.get(audit_reference)
+
+            if record is None:
+                return None
+
+            return deepcopy(record)
+
+
+audit_service = AuditService()</file><file path="backend/app/services/context_builder.py">from app.models.schemas import LeadRecord
 from app.services.workflow_context import WorkflowContext, build_workflow_context
 
 
@@ -703,65 +703,7 @@ def add_workflow_error(
     message: str,
 ) -&gt; None:
     &quot;&quot;&quot;Record an error without losing the workflow context.&quot;&quot;&quot;
-    context.errors.append(message)</file><file path="backend/app/services/workflow_service.py">from app.agents.lead_intake_agent import LeadIntakeAgent
-from app.agents.recency_agent import RecencyAgent
-from app.agents.engagement_agent import EngagementAgent
-from app.agents.fit_sla_agent import FitSlaAgent
-from app.agents.decision_agent import LeadPriorityDecisionAgent
-
-from app.models.schemas import WorkflowRequest, WorkflowResponse
-from app.services.context_builder import ContextBuilder
-from app.services.audit_service import audit_service
-
-
-class LeadWorkflowService:
-    &quot;&quot;&quot;Execute the complete AA007 lead-prioritization workflow.&quot;&quot;&quot;
-
-    def __init__(self):
-        self.agents = [
-            LeadIntakeAgent(),
-            RecencyAgent(),
-            EngagementAgent(),
-            FitSlaAgent(),
-            LeadPriorityDecisionAgent(),
-        ]
-
-    def run(self, request: WorkflowRequest) -&gt; WorkflowResponse:
-        context = ContextBuilder.build(request.lead)
-
-        # Execute all five agents in sequence.
-        for agent in self.agents:
-            agent.run(context)
-
-        decision = context.agent_results[-1]
-        details = decision.details
-
-        recommendation = details.get(&quot;recommendation&quot;) or &quot;REQUEST_DATA&quot;
-        reasons = details.get(&quot;reasons&quot;, [])
-        triggered_rules = details.get(&quot;triggered_rules&quot;, [])
-
-        # Save the actual workflow audit record.
-        audit_reference = audit_service.record_workflow(
-            workflow_id=context.workflow_id,
-            lead_id=context.lead.lead_id,
-            agent_outputs=context.agent_results,
-            triggered_rules=triggered_rules,
-            recommendation=recommendation,
-            errors=context.errors,
-        )
-
-        return WorkflowResponse(
-            workflow_id=context.workflow_id,
-            lead_id=context.lead.lead_id,
-            recommendation=recommendation,
-            priority_score=decision.score,
-            reasons=reasons,
-            triggered_rules=triggered_rules,
-            agent_outputs=context.agent_results,
-            evidence=context.evidence,
-            audit_reference=audit_reference,
-            errors=context.errors,
-        )</file><file path="backend/app/__init__.py"></file><file path="backend/tests/__init__.py"></file><file path="backend/requirements.txt">annotated-doc==0.0.5
+    context.errors.append(message)</file><file path="backend/app/__init__.py"></file><file path="backend/tests/__init__.py"></file><file path="backend/requirements.txt">annotated-doc==0.0.5
 annotated-types==0.8.0
 anyio==4.16.0
 certifi==2026.10.23
@@ -871,6 +813,18 @@ export interface WorkflowResponse {
   errors: string[];
 }
 
+export interface AuditRecord {
+  audit_reference: string;
+  workflow_id: string;
+  lead_id: string;
+  execution_timestamp: string;
+  agent_execution_sequence: string[];
+  agent_outputs: AgentResult[];
+  triggered_rules: string[];
+  final_recommendation: string;
+  errors: string[];
+}
+
 async function handleResponse&lt;T&gt;(response: Response): Promise&lt;T&gt; {
   if (!response.ok) {
     const message = await response.text();
@@ -902,6 +856,16 @@ export async function runWorkflow(
   });
 
   return handleResponse&lt;WorkflowResponse&gt;(response);
+}
+
+export async function getAuditRecord(
+  auditReference: string
+): Promise&lt;AuditRecord&gt; {
+  const response = await fetch(
+    `${API_BASE_URL}/audit/${encodeURIComponent(auditReference)}`
+  );
+
+  return handleResponse&lt;AuditRecord&gt;(response);
 }</file><file path="frontend/src/App.css">.app-shell {
   max-width: 1500px;
   margin: 0 auto;
@@ -1785,25 +1749,407 @@ export async function runWorkflow(
   .full-width {
     grid-column: auto;
   }
+}
+
+/* ==========================================
+   PHASE 1.2 - WORKFLOW EXPLAINER
+========================================== */
+
+.explainer-panel,
+.context-summary,
+.audit-inspector {
+  margin-top: 20px;
+  padding: 23px;
+  background: #ffffff;
+  border: 1px solid #e5eaf1;
+  border-radius: 13px;
+  min-width: 0;
+}
+
+.explainer-panel h2,
+.context-summary h3,
+.audit-inspector h3 {
+  color: #172e50;
+  margin: 0;
+  font-size: 18px;
+}
+
+.workflow-intro {
+  color: #718096;
+  font-size: 12px;
+  line-height: 1.8;
+  margin: 13px 0 18px;
+}
+
+.workflow-flow {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 22px 0;
+}
+
+.flow-node {
+  flex: 1 1 125px;
+  min-width: 110px;
+  max-width: 190px;
+  min-height: 105px;
+  padding: 13px 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid #dce6f2;
+  border-radius: 10px;
+  background: #f5f8fd;
+  text-align: center;
+}
+
+.flow-node &gt; span {
+  color: #5279aa;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+.flow-node strong {
+  color: #203957;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.flow-node small {
+  color: #8290a3;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.context-node {
+  background: #edf5ff;
+  border-color: #cbdcf2;
+}
+
+.agent-flow-node {
+  background: #f1effb;
+  border-color: #ded9f3;
+}
+
+.decision-node {
+  background: #eaf7f1;
+  border-color: #ccebdc;
+}
+
+.flow-arrow {
+  display: grid;
+  place-items: center;
+  color: #6683a8;
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.workflow-note {
+  padding: 14px 16px;
+  border-left: 3px solid #4778b8;
+  border-radius: 6px;
+  background: #f3f7fc;
+  color: #61738b;
+  font-size: 11px;
+  line-height: 1.8;
+}
+
+/* Shared workflow context */
+
+.context-summary {
+  margin: 0 0 16px;
+}
+
+.context-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.context-item {
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid #e7edf5;
+  border-radius: 9px;
+  background: #f9fbfe;
+}
+
+.context-item span {
+  display: block;
+  margin-bottom: 7px;
+  color: #8793a3;
+  font-size: 10px;
+}
+
+.context-item strong {
+  display: block;
+  color: #294361;
+  font-size: 11px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.context-footnote {
+  margin: 14px 0 0;
+  color: #8793a3;
+  font-size: 10px;
+  line-height: 1.7;
+}
+
+/* Detailed agent outputs */
+
+.agent-responsibility {
+  margin: 9px 0 !important;
+  color: #3e6087 !important;
+  font-size: 11px !important;
+  font-weight: 600;
+}
+
+.agent-input-box {
+  margin-top: 11px;
+  padding: 10px;
+  background: #f0f5fc;
+  border: 1px solid #e0eaf7;
+  border-radius: 7px;
+}
+
+.agent-input-box strong,
+.structured-output &gt; strong,
+.agent-evidence &gt; strong {
+  display: block;
+  color: #45668f;
+  font-size: 10px;
+  margin-bottom: 6px;
+}
+
+.agent-input-box p {
+  margin: 0;
+  color: #75849a;
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.agent-summary {
+  margin-top: 12px !important;
+  font-size: 11px !important;
+  color: #536780 !important;
+  line-height: 1.7 !important;
+}
+
+.structured-output {
+  margin-top: 13px;
+  padding-top: 12px;
+  border-top: 1px solid #e8edf4;
+}
+
+.structured-output pre,
+.audit-json {
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 11px;
+  margin: 7px 0;
+  border-radius: 7px;
+  background: #f3f6fa;
+  color: #42566f;
+  font-family: Consolas, &quot;Courier New&quot;, monospace;
+  font-size: 10px;
+  line-height: 1.7;
+}
+
+.agent-score {
+  color: #315f95 !important;
+  font-weight: 700;
+  margin-top: 8px !important;
+}
+
+.agent-evidence {
+  margin-top: 12px;
+  padding-top: 11px;
+  border-top: 1px solid #e8edf4;
+}
+
+.agent-evidence ul {
+  margin: 6px 0 0;
+  padding-left: 16px;
+}
+
+.agent-evidence li {
+  color: #77869a;
+  font-size: 10px;
+  line-height: 1.7;
+  margin-bottom: 5px;
+}
+
+/* Audit inspection */
+
+.audit-inspector {
+  margin-top: 16px;
+}
+
+.audit-inspector .section-title-row {
+  align-items: center;
+}
+
+.audit-button {
+  min-height: 39px;
+  padding: 9px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: #214e86;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.audit-button:hover:not(:disabled) {
+  background: #163b6d;
+}
+
+.audit-button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.audit-record-content {
+  margin-top: 17px;
+  padding-top: 15px;
+  border-top: 1px solid #e7edf5;
+}
+
+.audit-record-status {
+  display: inline-block;
+  padding: 8px 11px;
+  border-radius: 7px;
+  background: #e7f5ed;
+  color: #187d54;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.audit-record-content h4 {
+  margin: 20px 0 10px;
+  color: #294361;
+  font-size: 12px;
+}
+
+.audit-sequence {
+  padding-left: 22px;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 2;
+}
+
+.audit-json {
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+/* Responsive layout */
+
+@media (max-width: 900px) {
+  .workflow-flow {
+    justify-content: flex-start;
+  }
+
+  .flow-node {
+    flex-basis: 145px;
+  }
+
+  .context-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 650px) {
+  .explainer-panel,
+  .context-summary,
+  .audit-inspector {
+    padding: 16px;
+  }
+
+  .workflow-flow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .flow-node {
+    max-width: none;
+    min-height: 85px;
+  }
+
+  .flow-arrow {
+    transform: rotate(90deg);
+    min-height: 18px;
+  }
+
+  .context-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .audit-inspector .section-title-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .audit-button {
+    width: 100%;
+  }
 }</file><file path="frontend/src/App.tsx">import { useEffect, useMemo, useState } from &quot;react&quot;;
 import {
   checkBackendHealth,
   getLeads,
   runWorkflow,
+  getAuditRecord,
   type HealthResponse,
   type LeadRecord,
   type WorkflowResponse,
+  type AuditRecord,
+  type AgentResult,
 } from &quot;./api&quot;;
 import &quot;./App.css&quot;;
+
+const agentGuides: Record&lt;string, { responsibility: string; inputs: string }&gt; = {
+  &quot;Lead Intake Agent&quot;: {
+    responsibility: &quot;Checks whether essential lead information is available and valid.&quot;,
+    inputs: &quot;Contact name, email or phone, lead stage and source.&quot;,
+  },
+  &quot;Recency Agent&quot;: {
+    responsibility: &quot;Evaluates how old the lead is and how recently the lead was contacted.&quot;,
+    inputs: &quot;Lead age in days and last contact date.&quot;,
+  },
+  &quot;Engagement Agent&quot;: {
+    responsibility: &quot;Measures the level of recorded engagement from the lead.&quot;,
+    inputs: &quot;Engagement event count and event types.&quot;,
+  },
+  &quot;Fit &amp; SLA Agent&quot;: {
+    responsibility: &quot;Checks declared lead fit and whether a committed follow-up is overdue.&quot;,
+    inputs: &quot;Declared fit, follow-up commitment and due date.&quot;,
+  },
+  &quot;Lead Priority Decision Agent&quot;: {
+    responsibility: &quot;Combines the preceding agent outputs and applies deterministic decision rules.&quot;,
+    inputs: &quot;Intake status, recency, engagement, fit and SLA results.&quot;,
+  },
+};
 
 function App() {
   const [health, setHealth] = useState&lt;HealthResponse | null&gt;(null);
   const [leads, setLeads] = useState&lt;LeadRecord[]&gt;([]);
   const [selectedLeadId, setSelectedLeadId] = useState(&quot;&quot;);
   const [result, setResult] = useState&lt;WorkflowResponse | null&gt;(null);
+  const [auditRecord, setAuditRecord] = useState&lt;AuditRecord | null&gt;(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
+  const [auditLoading, setAuditLoading] = useState(false);
   const [error, setError] = useState(&quot;&quot;);
+  const [auditError, setAuditError] = useState(&quot;&quot;);
 
   const selectedLead = leads.find((lead) =&gt; lead.lead_id === selectedLeadId) ?? null;
 
@@ -1845,7 +2191,9 @@ function App() {
     try {
       setRunning(true);
       setError(&quot;&quot;);
+      setAuditError(&quot;&quot;);
       setResult(null);
+      setAuditRecord(null);
 
       const workflowResult = await runWorkflow(selectedLead);
       setResult(workflowResult);
@@ -1856,10 +2204,31 @@ function App() {
     }
   }
 
+  async function handleLoadAudit() {
+    if (!result) return;
+
+    try {
+      setAuditLoading(true);
+      setAuditError(&quot;&quot;);
+      setAuditRecord(null);
+
+      const record = await getAuditRecord(result.audit_reference);
+      setAuditRecord(record);
+    } catch (err) {
+      setAuditError(
+        err instanceof Error ? err.message : &quot;Unable to retrieve audit record.&quot;
+      );
+    } finally {
+      setAuditLoading(false);
+    }
+  }
+
   function selectLead(leadId: string) {
     setSelectedLeadId(leadId);
     setResult(null);
+    setAuditRecord(null);
     setError(&quot;&quot;);
+    setAuditError(&quot;&quot;);
   }
 
   function recommendationClass(recommendation: string) {
@@ -1871,6 +2240,54 @@ function App() {
 
   function displayValue(value: string | null | undefined) {
     return value || &quot;Not provided&quot;;
+  }
+
+  function formatDetails(details: Record&lt;string, unknown&gt;) {
+    return JSON.stringify(details, null, 2);
+  }
+
+  function renderAgentCard(agent: AgentResult, index: number) {
+    const guide = agentGuides[agent.agent_name];
+
+    return (
+      &lt;article className=&quot;agent-card&quot; key={`${agent.agent_name}-${index}`}&gt;
+        &lt;div className=&quot;agent-card-top&quot;&gt;
+          &lt;span className=&quot;agent-number&quot;&gt;STEP 0{index + 1}&lt;/span&gt;
+          &lt;span className=&quot;agent-status&quot;&gt;{agent.status}&lt;/span&gt;
+        &lt;/div&gt;
+
+        &lt;h4&gt;{agent.agent_name}&lt;/h4&gt;
+        &lt;p className=&quot;agent-responsibility&quot;&gt;
+          {guide?.responsibility || &quot;Processes its assigned workflow information.&quot;}
+        &lt;/p&gt;
+
+        &lt;div className=&quot;agent-input-box&quot;&gt;
+          &lt;strong&gt;Important inputs&lt;/strong&gt;
+          &lt;p&gt;{guide?.inputs || &quot;See the structured output below.&quot;}&lt;/p&gt;
+        &lt;/div&gt;
+
+        &lt;p className=&quot;agent-summary&quot;&gt;{agent.summary}&lt;/p&gt;
+
+        &lt;div className=&quot;structured-output&quot;&gt;
+          &lt;strong&gt;Structured output&lt;/strong&gt;
+          &lt;pre&gt;{formatDetails(agent.details)}&lt;/pre&gt;
+          {agent.score !== null &amp;&amp; (
+            &lt;p className=&quot;agent-score&quot;&gt;Score: {agent.score}&lt;/p&gt;
+          )}
+        &lt;/div&gt;
+
+        {agent.evidence.length &gt; 0 &amp;&amp; (
+          &lt;div className=&quot;agent-evidence&quot;&gt;
+            &lt;strong&gt;Evidence produced&lt;/strong&gt;
+            &lt;ul&gt;
+              {agent.evidence.map((item, evidenceIndex) =&gt; (
+                &lt;li key={evidenceIndex}&gt;{item}&lt;/li&gt;
+              ))}
+            &lt;/ul&gt;
+          &lt;/div&gt;
+        )}
+      &lt;/article&gt;
+    );
   }
 
   return (
@@ -1892,11 +2309,11 @@ function App() {
 
       &lt;section className=&quot;page-heading&quot;&gt;
         &lt;div&gt;
-          &lt;p className=&quot;eyebrow&quot;&gt;AGENTIC AI MVP · WORKSPACE&lt;/p&gt;
+          &lt;p className=&quot;eyebrow&quot;&gt;AGENTIC AI MVP · PHASE 1.2&lt;/p&gt;
           &lt;h1&gt;Lead Follow-up Intelligence&lt;/h1&gt;
           &lt;p className=&quot;page-description&quot;&gt;
-            Evaluate lead recency, engagement, fit and follow-up commitments
-            to generate evidence-based prioritization decisions.
+            Understand how specialized agents evaluate lead information,
+            share workflow context and produce evidence-based decisions.
           &lt;/p&gt;
         &lt;/div&gt;
         &lt;div className=&quot;system-label&quot;&gt;
@@ -1930,6 +2347,67 @@ function App() {
           &lt;/strong&gt;
           &lt;span className=&quot;metric-note&quot;&gt;Current session&lt;/span&gt;
         &lt;/article&gt;
+      &lt;/section&gt;
+
+      &lt;section className=&quot;explainer-panel&quot;&gt;
+        &lt;div className=&quot;section-title-row&quot;&gt;
+          &lt;div&gt;
+            &lt;p className=&quot;eyebrow&quot;&gt;HOW THE SYSTEM WORKS&lt;/p&gt;
+            &lt;h2&gt;Agent workflow architecture&lt;/h2&gt;
+          &lt;/div&gt;
+          &lt;span className=&quot;count-badge&quot;&gt;5 AGENTS&lt;/span&gt;
+        &lt;/div&gt;
+
+        &lt;p className=&quot;workflow-intro&quot;&gt;
+          Each workflow run starts with one business lead record. The Context
+          Builder prepares a run-scoped shared workflow context. Five agents
+          then execute in sequence, contributing their results and evidence
+          before the decision agent selects a recommendation.
+        &lt;/p&gt;
+
+        &lt;div className=&quot;workflow-flow&quot;&gt;
+          &lt;div className=&quot;flow-node&quot;&gt;
+            &lt;span&gt;01&lt;/span&gt;
+            &lt;strong&gt;Business Input&lt;/strong&gt;
+            &lt;small&gt;Lead record&lt;/small&gt;
+          &lt;/div&gt;
+          &lt;div className=&quot;flow-arrow&quot;&gt;→&lt;/div&gt;
+          &lt;div className=&quot;flow-node&quot;&gt;
+            &lt;span&gt;02&lt;/span&gt;
+            &lt;strong&gt;Context Builder&lt;/strong&gt;
+            &lt;small&gt;Prepares context&lt;/small&gt;
+          &lt;/div&gt;
+          &lt;div className=&quot;flow-arrow&quot;&gt;→&lt;/div&gt;
+          &lt;div className=&quot;flow-node context-node&quot;&gt;
+            &lt;span&gt;03&lt;/span&gt;
+            &lt;strong&gt;Run-Scoped Shared Context&lt;/strong&gt;
+            &lt;small&gt;Shared workflow data&lt;/small&gt;
+          &lt;/div&gt;
+          &lt;div className=&quot;flow-arrow&quot;&gt;→&lt;/div&gt;
+          &lt;div className=&quot;flow-node agent-flow-node&quot;&gt;
+            &lt;span&gt;04&lt;/span&gt;
+            &lt;strong&gt;Five Agents&lt;/strong&gt;
+            &lt;small&gt;Sequential evaluation&lt;/small&gt;
+          &lt;/div&gt;
+          &lt;div className=&quot;flow-arrow&quot;&gt;→&lt;/div&gt;
+          &lt;div className=&quot;flow-node&quot;&gt;
+            &lt;span&gt;05&lt;/span&gt;
+            &lt;strong&gt;Rules &amp; Evidence&lt;/strong&gt;
+            &lt;small&gt;Decision logic&lt;/small&gt;
+          &lt;/div&gt;
+          &lt;div className=&quot;flow-arrow&quot;&gt;→&lt;/div&gt;
+          &lt;div className=&quot;flow-node decision-node&quot;&gt;
+            &lt;span&gt;06&lt;/span&gt;
+            &lt;strong&gt;Recommendation&lt;/strong&gt;
+            &lt;small&gt;Audit record&lt;/small&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+
+        &lt;div className=&quot;workflow-note&quot;&gt;
+          &lt;strong&gt;Shared context:&lt;/strong&gt; The lead data, workflow ID, agent
+          results, collected evidence, errors and metadata are held in the
+          current workflow context. This is run-scoped data, not permanent memory.
+        &lt;/div&gt;
       &lt;/section&gt;
 
       &lt;div className=&quot;workspace-grid&quot;&gt;
@@ -1978,7 +2456,7 @@ function App() {
         &lt;section className=&quot;panel detail-panel&quot;&gt;
           &lt;div className=&quot;panel-heading&quot;&gt;
             &lt;div&gt;
-              &lt;p className=&quot;eyebrow&quot;&gt;LEAD PROFILE&lt;/p&gt;
+              &lt;p className=&quot;eyebrow&quot;&gt;BUSINESS INPUT&lt;/p&gt;
               &lt;h2&gt;Lead details&lt;/h2&gt;
             &lt;/div&gt;
             {selectedLead &amp;&amp; &lt;span className=&quot;record-label&quot;&gt;Selected record&lt;/span&gt;}
@@ -2104,9 +2582,50 @@ function App() {
 
         {result &amp;&amp; (
           &lt;div className=&quot;result-content&quot;&gt;
+            &lt;section className=&quot;context-summary&quot;&gt;
+              &lt;div className=&quot;section-title-row&quot;&gt;
+                &lt;div&gt;
+                  &lt;p className=&quot;eyebrow&quot;&gt;CURRENT WORKFLOW RUN&lt;/p&gt;
+                  &lt;h3&gt;Run-scoped shared workflow context&lt;/h3&gt;
+                &lt;/div&gt;
+                &lt;span className=&quot;record-label&quot;&gt;Active run result&lt;/span&gt;
+              &lt;/div&gt;
+
+              &lt;div className=&quot;context-grid&quot;&gt;
+                &lt;div className=&quot;context-item&quot;&gt;
+                  &lt;span&gt;Workflow ID&lt;/span&gt;
+                  &lt;strong&gt;{result.workflow_id}&lt;/strong&gt;
+                &lt;/div&gt;
+                &lt;div className=&quot;context-item&quot;&gt;
+                  &lt;span&gt;Lead ID&lt;/span&gt;
+                  &lt;strong&gt;{result.lead_id}&lt;/strong&gt;
+                &lt;/div&gt;
+                &lt;div className=&quot;context-item&quot;&gt;
+                  &lt;span&gt;Agent results&lt;/span&gt;
+                  &lt;strong&gt;{result.agent_outputs.length}&lt;/strong&gt;
+                &lt;/div&gt;
+                &lt;div className=&quot;context-item&quot;&gt;
+                  &lt;span&gt;Collected evidence&lt;/span&gt;
+                  &lt;strong&gt;{result.evidence.length}&lt;/strong&gt;
+                &lt;/div&gt;
+                &lt;div className=&quot;context-item&quot;&gt;
+                  &lt;span&gt;Workflow errors&lt;/span&gt;
+                  &lt;strong&gt;{result.errors.length}&lt;/strong&gt;
+                &lt;/div&gt;
+                &lt;div className=&quot;context-item&quot;&gt;
+                  &lt;span&gt;Audit reference&lt;/span&gt;
+                  &lt;strong&gt;{result.audit_reference}&lt;/strong&gt;
+                &lt;/div&gt;
+              &lt;/div&gt;
+              &lt;p className=&quot;context-footnote&quot;&gt;
+                Values above come from the completed workflow response. The
+                context is scoped to this execution and is not persistent memory.
+              &lt;/p&gt;
+            &lt;/section&gt;
+
             &lt;div className={`recommendation-card ${recommendationClass(result.recommendation)}`}&gt;
               &lt;div&gt;
-                &lt;span className=&quot;recommendation-label&quot;&gt;RECOMMENDED ACTION&lt;/span&gt;
+                &lt;span className=&quot;recommendation-label&quot;&gt;FINAL RECOMMENDATION&lt;/span&gt;
                 &lt;h3&gt;{result.recommendation.replaceAll(&quot;_&quot;, &quot; &quot;)}&lt;/h3&gt;
                 &lt;p&gt;Lead: {result.lead_id}&lt;/p&gt;
               &lt;/div&gt;
@@ -2148,12 +2667,10 @@ function App() {
                   &lt;span&gt;Agent count&lt;/span&gt;
                   &lt;strong&gt;{result.agent_outputs.length}&lt;/strong&gt;
                 &lt;/div&gt;
-                {result.priority_score !== null &amp;&amp; (
-                  &lt;div className=&quot;audit-field&quot;&gt;
-                    &lt;span&gt;Priority score&lt;/span&gt;
-                    &lt;strong&gt;{result.priority_score}&lt;/strong&gt;
-                  &lt;/div&gt;
-                )}
+                &lt;div className=&quot;audit-field&quot;&gt;
+                  &lt;span&gt;Priority score&lt;/span&gt;
+                  &lt;strong&gt;{result.priority_score ?? &quot;Not scored&quot;}&lt;/strong&gt;
+                &lt;/div&gt;
               &lt;/div&gt;
             &lt;/div&gt;
 
@@ -2161,34 +2678,25 @@ function App() {
               &lt;div className=&quot;section-title-row&quot;&gt;
                 &lt;div&gt;
                   &lt;p className=&quot;eyebrow&quot;&gt;MULTI-AGENT EXECUTION&lt;/p&gt;
-                  &lt;h3&gt;Agent activity&lt;/h3&gt;
+                  &lt;h3&gt;Agent activity and structured outputs&lt;/h3&gt;
                 &lt;/div&gt;
                 &lt;span className=&quot;count-badge&quot;&gt;{result.agent_outputs.length} agents&lt;/span&gt;
               &lt;/div&gt;
 
+              &lt;p className=&quot;workflow-intro&quot;&gt;
+                Agents are displayed in the actual order returned by the workflow.
+                Each agent contributes results and evidence to the shared context.
+              &lt;/p&gt;
+
               &lt;div className=&quot;agent-grid&quot;&gt;
-                {result.agent_outputs.map((agent, index) =&gt; (
-                  &lt;article className=&quot;agent-card&quot; key={`${agent.agent_name}-${index}`}&gt;
-                    &lt;div className=&quot;agent-card-top&quot;&gt;
-                      &lt;span className=&quot;agent-number&quot;&gt;0{index + 1}&lt;/span&gt;
-                      &lt;span className=&quot;agent-status&quot;&gt;{agent.status}&lt;/span&gt;
-                    &lt;/div&gt;
-                    &lt;h4&gt;{agent.agent_name}&lt;/h4&gt;
-                    &lt;p&gt;{agent.summary}&lt;/p&gt;
-                    {agent.evidence.length &gt; 0 &amp;&amp; (
-                      &lt;ul&gt;
-                        {agent.evidence.map((item, evidenceIndex) =&gt; (
-                          &lt;li key={evidenceIndex}&gt;{item}&lt;/li&gt;
-                        ))}
-                      &lt;/ul&gt;
-                    )}
-                  &lt;/article&gt;
-                ))}
+                {result.agent_outputs.map((agent, index) =&gt;
+                  renderAgentCard(agent, index)
+                )}
               &lt;/div&gt;
             &lt;/div&gt;
 
             &lt;div className=&quot;evidence-panel&quot;&gt;
-              &lt;h3&gt;Consolidated evidence&lt;/h3&gt;
+              &lt;h3&gt;Consolidated decision evidence&lt;/h3&gt;
               {result.evidence.length &gt; 0 ? (
                 &lt;ul className=&quot;evidence-list&quot;&gt;
                   {result.evidence.map((item, index) =&gt; (
@@ -2199,6 +2707,68 @@ function App() {
                 &lt;p className=&quot;muted&quot;&gt;No consolidated evidence returned.&lt;/p&gt;
               )}
             &lt;/div&gt;
+
+            &lt;section className=&quot;audit-inspector&quot;&gt;
+              &lt;div className=&quot;section-title-row&quot;&gt;
+                &lt;div&gt;
+                  &lt;p className=&quot;eyebrow&quot;&gt;RETRIEVABLE RECORD&lt;/p&gt;
+                  &lt;h3&gt;Stored workflow audit&lt;/h3&gt;
+                  &lt;p className=&quot;muted&quot;&gt;
+                    Retrieve the saved execution record using its audit reference.
+                  &lt;/p&gt;
+                &lt;/div&gt;
+                &lt;button
+                  className=&quot;audit-button&quot;
+                  onClick={handleLoadAudit}
+                  disabled={auditLoading}
+                &gt;
+                  {auditLoading ? &quot;Retrieving...&quot; : &quot;Retrieve audit record&quot;}
+                &lt;/button&gt;
+              &lt;/div&gt;
+
+              {auditError &amp;&amp; &lt;div className=&quot;error-banner&quot;&gt;{auditError}&lt;/div&gt;}
+
+              {auditRecord &amp;&amp; (
+                &lt;div className=&quot;audit-record-content&quot;&gt;
+                  &lt;div className=&quot;audit-record-status&quot;&gt;Audit record retrieved successfully&lt;/div&gt;
+                  &lt;div className=&quot;context-grid&quot;&gt;
+                    &lt;div className=&quot;context-item&quot;&gt;
+                      &lt;span&gt;Audit reference&lt;/span&gt;
+                      &lt;strong&gt;{auditRecord.audit_reference}&lt;/strong&gt;
+                    &lt;/div&gt;
+                    &lt;div className=&quot;context-item&quot;&gt;
+                      &lt;span&gt;Execution timestamp (UTC)&lt;/span&gt;
+                      &lt;strong&gt;{auditRecord.execution_timestamp}&lt;/strong&gt;
+                    &lt;/div&gt;
+                    &lt;div className=&quot;context-item&quot;&gt;
+                      &lt;span&gt;Final recommendation&lt;/span&gt;
+                      &lt;strong&gt;{auditRecord.final_recommendation}&lt;/strong&gt;
+                    &lt;/div&gt;
+                    &lt;div className=&quot;context-item&quot;&gt;
+                      &lt;span&gt;Recorded agent sequence&lt;/span&gt;
+                      &lt;strong&gt;{auditRecord.agent_execution_sequence.length} agents&lt;/strong&gt;
+                    &lt;/div&gt;
+                  &lt;/div&gt;
+
+                  &lt;h4&gt;Recorded execution sequence&lt;/h4&gt;
+                  &lt;ol className=&quot;audit-sequence&quot;&gt;
+                    {auditRecord.agent_execution_sequence.map((name, index) =&gt; (
+                      &lt;li key={`${name}-${index}`}&gt;{name}&lt;/li&gt;
+                    ))}
+                  &lt;/ol&gt;
+
+                  &lt;h4&gt;Stored audit data&lt;/h4&gt;
+                  &lt;pre className=&quot;audit-json&quot;&gt;
+                    {JSON.stringify(auditRecord, null, 2)}
+                  &lt;/pre&gt;
+                &lt;/div&gt;
+              )}
+
+              &lt;p className=&quot;context-footnote&quot;&gt;
+                Audit storage is currently in memory. Records are available while
+                the backend process remains running and are cleared when it restarts.
+              &lt;/p&gt;
+            &lt;/section&gt;
 
             {result.errors.length &gt; 0 &amp;&amp; (
               &lt;div className=&quot;error-banner&quot;&gt;
@@ -2211,7 +2781,7 @@ function App() {
 
       &lt;footer className=&quot;footer&quot;&gt;
         &lt;span&gt;AA007 · Lead Follow-up Prioritization Intelligence&lt;/span&gt;
-        &lt;span&gt;Phase 1.1 MVP · Deterministic agent workflow&lt;/span&gt;
+        &lt;span&gt;Phase 1.2 · Explainable deterministic agent workflow&lt;/span&gt;
       &lt;/footer&gt;
     &lt;/main&gt;
   );
@@ -2458,7 +3028,65 @@ Thumbs.db
 
 # Temporary files
 *.tmp
-*.bak</file><file path="backend/app/main.py">from fastapi import FastAPI, HTTPException
+*.bak</file><file path="backend/app/services/workflow_service.py">from app.agents.lead_intake_agent import LeadIntakeAgent
+from app.agents.recency_agent import RecencyAgent
+from app.agents.engagement_agent import EngagementAgent
+from app.agents.fit_sla_agent import FitSlaAgent
+from app.agents.decision_agent import LeadPriorityDecisionAgent
+
+from app.models.schemas import WorkflowRequest, WorkflowResponse
+from app.services.context_builder import ContextBuilder
+from app.services.audit_service import audit_service
+
+
+class LeadWorkflowService:
+    &quot;&quot;&quot;Execute the complete AA007 lead-prioritization workflow.&quot;&quot;&quot;
+
+    def __init__(self):
+        self.agents = [
+            LeadIntakeAgent(),
+            RecencyAgent(),
+            EngagementAgent(),
+            FitSlaAgent(),
+            LeadPriorityDecisionAgent(),
+        ]
+
+    def run(self, request: WorkflowRequest) -&gt; WorkflowResponse:
+        context = ContextBuilder.build(request.lead)
+
+        # Execute all five agents in sequence.
+        for agent in self.agents:
+            agent.run(context)
+
+        decision = context.agent_results[-1]
+        details = decision.details
+
+        recommendation = details.get(&quot;recommendation&quot;) or &quot;REQUEST_DATA&quot;
+        reasons = details.get(&quot;reasons&quot;, [])
+        triggered_rules = details.get(&quot;triggered_rules&quot;, [])
+
+        # Save the actual workflow audit record.
+        audit_reference = audit_service.record_workflow(
+            workflow_id=context.workflow_id,
+            lead_id=context.lead.lead_id,
+            agent_outputs=context.agent_results,
+            triggered_rules=triggered_rules,
+            recommendation=recommendation,
+            errors=context.errors,
+        )
+
+        return WorkflowResponse(
+            workflow_id=context.workflow_id,
+            lead_id=context.lead.lead_id,
+            recommendation=recommendation,
+            priority_score=decision.score,
+            reasons=reasons,
+            triggered_rules=triggered_rules,
+            agent_outputs=context.agent_results,
+            evidence=context.evidence,
+            audit_reference=audit_reference,
+            errors=context.errors,
+        )</file><file path="backend/app/main.py">from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.data.seed_leads import get_seed_leads

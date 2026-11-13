@@ -58,6 +58,18 @@ export interface WorkflowResponse {
   errors: string[];
 }
 
+export interface AuditRecord {
+  audit_reference: string;
+  workflow_id: string;
+  lead_id: string;
+  execution_timestamp: string;
+  agent_execution_sequence: string[];
+  agent_outputs: AgentResult[];
+  triggered_rules: string[];
+  final_recommendation: string;
+  errors: string[];
+}
+
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const message = await response.text();
@@ -89,4 +101,14 @@ export async function runWorkflow(
   });
 
   return handleResponse<WorkflowResponse>(response);
+}
+
+export async function getAuditRecord(
+  auditReference: string
+): Promise<AuditRecord> {
+  const response = await fetch(
+    `${API_BASE_URL}/audit/${encodeURIComponent(auditReference)}`
+  );
+
+  return handleResponse<AuditRecord>(response);
 }
