@@ -1,6 +1,6 @@
-﻿# AA007 — Lead Follow-up Prioritization Intelligence
+# AA007 — Lead Follow-up Prioritization Intelligence
 
-**Agentic AI MVP | RealRails Agentic AI Internship | Phase 1.2**
+**Agentic AI MVP | RealRails Agentic AI Internship | Phase 1.4 — Cloud Deployment & Phase 1 Completion**
 
 ## 1. Project Overview
 
@@ -211,15 +211,43 @@ This project is a deterministic MVP.
 - Audit records are stored in memory.
 - The project does not claim persistent database storage or permanent memory.
 
-## 15. Repository
+## 15. Cloud Deployment — Phase 1.4
+
+The application is deployed on Render.
+
+| Component | URL |
+|---|---|
+| Frontend Application | https://aa007-lead-followup-intelligence.onrender.com/ |
+| Backend Health Endpoint | https://aa007-backend-vd1y.onrender.com/health |
+
+### Deployment Validation
+
+The Phase 1.4 deployment was reviewed and accepted by the RealRails maintainer.
+
+Validated deployment capabilities:
+
+- Public Render frontend availability.
+- Backend health endpoint availability.
+- Frontend-to-backend communication.
+- Sample lead loading.
+- Execution of all five deterministic agents.
+- Correct recommendation generation.
+- Explanation and supporting evidence.
+- Audit record retrieval.
+- Workflow completion without errors.
+- No LangGraph or LLM introduced during Phase 1.
+
+### Phase 1.4 Deployment Commit
+
+`b9a8e2e324876515b2b8edae8e41502ac4e05737`
+
+## 16. Repository
 
 GitHub:
 
 https://github.com/dhanushacherian/AA007-Lead-Followup-Intelligence
 
-Latest verified Phase 1.2 commit:
-
-`398e3e1` — Explain and visualize AA007 agent workflow - Phase 1.2
+**Project status:** Phase 1.4 implementation accepted. Final repository documentation and Repomix cleanup complete the Phase 1 closure requirements.
 
 ---
 

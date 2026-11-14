@@ -807,24 +807,6 @@ def add_workflow_error(
 
 </file>
 
-<file path="backend/Dockerfile">
-FROM python:3.12-slim
-
-WORKDIR /app
-
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY app ./app
-
-EXPOSE 8000
-
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-</file>
-
 <file path="backend/requirements.txt">
 annotated-doc==0.0.5
 annotated-types==0.8.0
@@ -1421,7 +1403,7 @@ Thumbs.db
 <file path="README.md">
 # AA007 — Lead Follow-up Prioritization Intelligence
 
-**Agentic AI MVP | RealRails Agentic AI Internship | Phase 1.2**
+**Agentic AI MVP | RealRails Agentic AI Internship | Phase 1.4 — Cloud Deployment & Phase 1 Completion**
 
 ## 1. Project Overview
 
@@ -1632,15 +1614,43 @@ This project is a deterministic MVP.
 - Audit records are stored in memory.
 - The project does not claim persistent database storage or permanent memory.
 
-## 15. Repository
+## 15. Cloud Deployment — Phase 1.4
+
+The application is deployed on Render.
+
+| Component | URL |
+|---|---|
+| Frontend Application | https://aa007-lead-followup-intelligence.onrender.com/ |
+| Backend Health Endpoint | https://aa007-backend-vd1y.onrender.com/health |
+
+### Deployment Validation
+
+The Phase 1.4 deployment was reviewed and accepted by the RealRails maintainer.
+
+Validated deployment capabilities:
+
+- Public Render frontend availability.
+- Backend health endpoint availability.
+- Frontend-to-backend communication.
+- Sample lead loading.
+- Execution of all five deterministic agents.
+- Correct recommendation generation.
+- Explanation and supporting evidence.
+- Audit record retrieval.
+- Workflow completion without errors.
+- No LangGraph or LLM introduced during Phase 1.
+
+### Phase 1.4 Deployment Commit
+
+`b9a8e2e324876515b2b8edae8e41502ac4e05737`
+
+## 16. Repository
 
 GitHub:
 
 https://github.com/dhanushacherian/AA007-Lead-Followup-Intelligence
 
-Latest verified Phase 1.2 commit:
-
-`398e3e1` — Explain and visualize AA007 agent workflow - Phase 1.2
+**Project status:** Phase 1.4 implementation accepted. Final repository documentation and Repomix cleanup complete the Phase 1 closure requirements.
 
 ---
 
@@ -1709,6 +1719,24 @@ class LeadWorkflowService:
             audit_reference=audit_reference,
             errors=context.errors,
         )
+</file>
+
+<file path="backend/Dockerfile">
+FROM python:3.12-slim
+
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY app ./app
+
+EXPOSE 10000
+
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-10000}"]
 </file>
 
 <file path="frontend/src/App.css">
@@ -3674,80 +3702,6 @@ services:
         condition: service_healthy
 </file>
 
-<file path="backend/app/main.py">
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-
-from app.data.seed_leads import get_seed_leads
-from app.models.schemas import (
-    LeadRecord,
-    WorkflowRequest,
-    WorkflowResponse,
-)
-from app.services.workflow_service import LeadWorkflowService
-from app.services.audit_service import audit_service
-
-
-app = FastAPI(
-    title="AA007 - Lead Follow-up Prioritization Intelligence",
-    description="Deterministic agentic AI MVP for lead follow-up prioritization.",
-    version="0.1.0",
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://127.0.0.1:5173"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-workflow_service = LeadWorkflowService()
-
-
-@app.get("/")
-def root():
-    return {
-        "project": "AA007 - Lead Follow-up Prioritization Intelligence",
-        "status": "running",
-        "message": "Welcome to the AA007 API",
-    }
-
-
-@app.get("/health")
-def health_check():
-    return {
-        "status": "healthy",
-        "service": "AA007 Backend",
-    }
-
-
-@app.get("/leads", response_model=list[LeadRecord])
-def list_leads():
-    """Return the seeded sample leads."""
-    return get_seed_leads()
-
-
-@app.post("/workflow/run", response_model=WorkflowResponse)
-def run_lead_workflow(request: WorkflowRequest):
-    """Execute all five agents and return the lead decision."""
-    return workflow_service.run(request)
-
-
-@app.get("/audit/{audit_reference}")
-def get_audit_record(audit_reference: str):
-    """Retrieve an actual stored workflow audit record."""
-    record = audit_service.get_audit_record(audit_reference)
-
-    if record is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Audit record not found.",
-        )
-
-    return record
-</file>
-
 <file path="backend/tests/test_health.py">
 from datetime import date, datetime, timedelta, timezone
 
@@ -4108,6 +4062,91 @@ export async function getAuditRecord(
 
   return handleResponse<AuditRecord>(response);
 }
+</file>
+
+<file path="backend/app/main.py">
+import os
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.data.seed_leads import get_seed_leads
+from app.models.schemas import (
+    LeadRecord,
+    WorkflowRequest,
+    WorkflowResponse,
+)
+from app.services.workflow_service import LeadWorkflowService
+from app.services.audit_service import audit_service
+
+
+app = FastAPI(
+    title="AA007 - Lead Follow-up Prioritization Intelligence",
+    description="Deterministic agentic AI MVP for lead follow-up prioritization.",
+    version="0.1.0",
+)
+
+allowed_origins = [
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ORIGINS",
+        "http://127.0.0.1:5173"
+    ).split(",")
+    if origin.strip()
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+workflow_service = LeadWorkflowService()
+
+
+@app.get("/")
+def root():
+    return {
+        "project": "AA007 - Lead Follow-up Prioritization Intelligence",
+        "status": "running",
+        "message": "Welcome to the AA007 API",
+    }
+
+
+@app.get("/health")
+def health_check():
+    return {
+        "status": "healthy",
+        "service": "AA007 Backend",
+    }
+
+
+@app.get("/leads", response_model=list[LeadRecord])
+def list_leads():
+    """Return the seeded sample leads."""
+    return get_seed_leads()
+
+
+@app.post("/workflow/run", response_model=WorkflowResponse)
+def run_lead_workflow(request: WorkflowRequest):
+    """Execute all five agents and return the lead decision."""
+    return workflow_service.run(request)
+
+
+@app.get("/audit/{audit_reference}")
+def get_audit_record(audit_reference: str):
+    """Retrieve an actual stored workflow audit record."""
+    record = audit_service.get_audit_record(audit_reference)
+
+    if record is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Audit record not found.",
+        )
+
+    return record
 </file>
 
 </files>
