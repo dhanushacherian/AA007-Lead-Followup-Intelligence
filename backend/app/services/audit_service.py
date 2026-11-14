@@ -22,6 +22,7 @@ class AuditService:
         triggered_rules: list[str],
         recommendation: str,
         errors: list[str],
+        graph_execution_trace: list[dict[str, str]] | None = None,
     ) -> str:
         """Save a completed workflow and return its audit reference."""
 
@@ -42,6 +43,7 @@ class AuditService:
             "triggered_rules": list(triggered_rules),
             "final_recommendation": recommendation,
             "errors": list(errors),
+            "graph_execution_trace": deepcopy(graph_execution_trace or []),
         }
 
         with self._lock:

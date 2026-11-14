@@ -240,3 +240,73 @@ def test_unknown_audit_reference_returns_404():
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Audit record not found."
+
+
+def test_workflow_records_langgraph_node_execution_order():
+    response = client.post(
+        "/workflow/run",
+        json={
+            "lead": get_seed_leads()[0].model_dump(mode="json")
+        },
+    )
+
+    assert response.status_code == 200
+
+    audit_reference = response.json()["audit_reference"]
+    audit_response = client.get(f"/audit/{audit_reference}")
+
+    assert audit_response.status_code == 200
+
+    trace = audit_response.json()["graph_execution_trace"]
+
+    expected_nodes = [
+        "initialize_context",
+        "lead_intake",
+        "recency",
+        "engagement",
+        "fit_sla",
+        "decision",
+        "finalize",
+    ]
+
+    completed_nodes = [
+        event["node"]
+        for event in trace
+        if event["status"] == "completed"
+    ]
+
+    assert completed_nodes == expected_nodes
+
+
+def test_workflow_records_started_and_completed_for_each_node():
+    response = client.post(
+        "/workflow/run",
+        json={
+            "lead": get_seed_leads()[0].model_dump(mode="json")
+        },
+    )
+
+    assert response.status_code == 200
+
+    audit_reference = response.json()["audit_reference"]
+    audit_response = client.get(f"/audit/{audit_reference}")
+
+    assert audit_response.status_code == 200
+
+    trace = audit_response.json()["graph_execution_trace"]
+
+    expected_events = [
+        {"node": node, "status": status}
+        for node in [
+            "initialize_context",
+            "lead_intake",
+            "recency",
+            "engagement",
+            "fit_sla",
+            "decision",
+            "finalize",
+        ]
+        for status in ["started", "completed"]
+    ]
+
+    assert trace == expected_events

@@ -38,3 +38,6 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.bak
+
+# Linux virtual environment
+.venv-linux/
