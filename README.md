@@ -1,6 +1,6 @@
 # AA007 — Lead Follow-up Prioritization Intelligence
 
-**Agentic AI MVP | RealRails Agentic AI Internship | Phase 1.4 — Cloud Deployment & Phase 1 Completion**
+**Agentic AI MVP | RealRails Agentic AI Internship | Phase 1.4 — Cloud Deployment | Phase 2.1 — LangGraph Linear Orchestration**
 
 ## 1. Project Overview
 
@@ -32,14 +32,24 @@ The application helps sales operations teams understand which leads need immedia
 
 ## 4. Workflow Architecture
 
-The application follows this sequence:
+The application uses a **linear LangGraph StateGraph** to orchestrate the existing deterministic lead-prioritization workflow.
 
-**Business Input → Context Builder → Run-Scoped Shared Workflow Context → Five Specialized Agents → Rules and Evidence → Final Recommendation → Explanation and Audit**
+Execution follows this sequence:
 
-Each workflow execution creates its own context. Agents contribute their outputs and evidence to that execution.
+**START → Initialize Context → Lead Intake → Recency → Engagement → Fit & SLA → Decision → Finalize → END**
 
-The context is run-scoped and is not permanent memory.
+The graph contains seven execution nodes:
+- `initialize_context` — creates the run-scoped workflow context.
+- `lead_intake` — validates the lead information.
+- `recency` — evaluates the last contact date.
+- `engagement` — evaluates engagement activity.
+- `fit_sla` — evaluates lead fit and follow-up SLA.
+- `decision` — applies the existing deterministic business rules.
+- `finalize` — prepares the response and records the audit information.
 
+The five existing agents and their deterministic business rules are preserved. Graph execution events are recorded in the audit trace.
+
+The context remains run-scoped and is not permanent memory.
 ## 5. Five Specialized Agents
 
 | Order | Agent | Responsibility |
@@ -260,3 +270,32 @@ https://github.com/dhanushacherian/AA007-Lead-Followup-Intelligence
 **AA007 — Lead Follow-up Prioritization Intelligence**
 
 *Explainable deterministic multi-agent workflow for sales lead prioritization.*
+
+## 16. Phase 2.1 — LangGraph Linear Orchestration
+
+Phase 2.1 evolves the existing Phase 1 deterministic workflow into a linear LangGraph orchestration.
+
+### Implementation
+
+- Introduced a shared LangGraph state for workflow execution.
+- Converted the existing workflow steps into seven linear graph nodes.
+- Preserved all five existing agents and deterministic decision rules.
+- Preserved the existing API response contract and recommendation behavior.
+- Added graph execution tracing with node start and completion events.
+- Extended audit records to include the graph execution trace.
+- Updated the frontend architecture explanation to reflect LangGraph orchestration.
+
+### Validation
+
+- LangGraph graph compilation and execution verified.
+- HOT, WARM and STALE lead scenarios tested.
+- Expected deterministic recommendations preserved.
+- Backend tests: 15 passed.
+- Frontend production build: passed.
+- Updated Repomix snapshot: `AA007-Repomix.xml`.
+
+### Phase 2.1 Git Commit
+
+`ca050826837201dd7f003fe3b68cde8c993f83ad`
+
+**Project status:** Phase 1.4 deployment documentation retained. Phase 2.1 LangGraph linear orchestration implemented and committed.
