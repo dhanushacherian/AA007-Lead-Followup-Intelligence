@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   checkBackendHealth,
   getLeads,
@@ -205,7 +205,7 @@ function App() {
 
       <section className="page-heading">
         <div>
-          <p className="eyebrow">AGENTIC AI MVP · PHASE 1.2</p>
+          <p className="eyebrow">AGENTIC AI MVP · PHASE 2.1</p>
           <h1>Lead Follow-up Intelligence</h1>
           <p className="page-description">
             Understand how specialized agents evaluate lead information,
@@ -255,54 +255,66 @@ function App() {
         </div>
 
         <p className="workflow-intro">
-          Each workflow run starts with one business lead record. The Context
-          Builder prepares a run-scoped shared workflow context. Five agents
-          then execute in sequence, contributing their results and evidence
-          before the decision agent selects a recommendation.
+          Each workflow run starts with one business lead record. The LangGraph
+          StateGraph executes a linear seven-node workflow: it initializes
+          shared context, runs the four existing analysis agents and the
+          decision agent, then finalizes the recommendation and audit record.
         </p>
 
         <div className="workflow-flow">
           <div className="flow-node">
-            <span>01</span>
-            <strong>Business Input</strong>
-            <small>Lead record</small>
-          </div>
-          <div className="flow-arrow">→</div>
-          <div className="flow-node">
-            <span>02</span>
-            <strong>Context Builder</strong>
-            <small>Prepares context</small>
+            <span>START</span>
+            <strong>Workflow Start</strong>
+            <small>Incoming lead</small>
           </div>
           <div className="flow-arrow">→</div>
           <div className="flow-node context-node">
+            <span>01</span>
+            <strong>Initialize Context</strong>
+            <small>Build shared state</small>
+          </div>
+          <div className="flow-arrow">→</div>
+          <div className="flow-node agent-flow-node">
+            <span>02</span>
+            <strong>Lead Intake</strong>
+            <small>Validate lead data</small>
+          </div>
+          <div className="flow-arrow">→</div>
+          <div className="flow-node agent-flow-node">
             <span>03</span>
-            <strong>Run-Scoped Shared Context</strong>
-            <small>Shared workflow data</small>
+            <strong>Recency</strong>
+            <small>Evaluate contact age</small>
           </div>
           <div className="flow-arrow">→</div>
           <div className="flow-node agent-flow-node">
             <span>04</span>
-            <strong>Five Agents</strong>
-            <small>Sequential evaluation</small>
+            <strong>Engagement</strong>
+            <small>Evaluate interactions</small>
           </div>
           <div className="flow-arrow">→</div>
-          <div className="flow-node">
+          <div className="flow-node agent-flow-node">
             <span>05</span>
-            <strong>Rules & Evidence</strong>
-            <small>Decision logic</small>
+            <strong>Fit &amp; SLA</strong>
+            <small>Check fit and deadlines</small>
           </div>
           <div className="flow-arrow">→</div>
           <div className="flow-node decision-node">
             <span>06</span>
-            <strong>Recommendation</strong>
-            <small>Audit record</small>
+            <strong>Decision</strong>
+            <small>Apply deterministic rules</small>
           </div>
-        </div>
-
-        <div className="workflow-note">
-          <strong>Shared context:</strong> The lead data, workflow ID, agent
-          results, collected evidence, errors and metadata are held in the
-          current workflow context. This is run-scoped data, not permanent memory.
+          <div className="flow-arrow">→</div>
+          <div className="flow-node context-node">
+            <span>07</span>
+            <strong>Finalize</strong>
+            <small>Response and audit</small>
+          </div>
+          <div className="flow-arrow">→</div>
+          <div className="flow-node">
+            <span>END</span>
+            <strong>Workflow Complete</strong>
+            <small>Final recommendation</small>
+          </div>
         </div>
       </section>
 
@@ -437,11 +449,11 @@ function App() {
                 onClick={handleRunWorkflow}
                 disabled={running || loading}
               >
-                {running ? "Executing five agents..." : "Run Prioritization"}
+                {running ? "Executing LangGraph workflow..." : "Run Prioritization"}
                 {!running && <span aria-hidden="true">→</span>}
               </button>
               <p className="button-note">
-                Runs the five-agent workflow against the selected lead record.
+                Runs the seven-node LangGraph workflow against the selected lead record.
               </p>
             </>
           )}
@@ -580,8 +592,8 @@ function App() {
               </div>
 
               <p className="workflow-intro">
-                Agents are displayed in the actual order returned by the workflow.
-                Each agent contributes results and evidence to the shared context.
+                The four analysis agents evaluate the lead, and the decision
+                agent combines their outputs and evidence to produce the recommendation.
               </p>
 
               <div className="agent-grid">
@@ -677,7 +689,7 @@ function App() {
 
       <footer className="footer">
         <span>AA007 · Lead Follow-up Prioritization Intelligence</span>
-        <span>Phase 1.2 · Explainable deterministic agent workflow</span>
+        <span>Phase 2.1 · LangGraph linear orchestration with deterministic decisions</span>
       </footer>
     </main>
   );

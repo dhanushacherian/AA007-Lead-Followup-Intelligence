@@ -1,4 +1,4 @@
-﻿.app-shell {
+.app-shell {
   max-width: 1500px;
   margin: 0 auto;
   padding: 0 42px 28px;
@@ -884,7 +884,7 @@
 }
 
 /* ==========================================
-   PHASE 1.2 - WORKFLOW EXPLAINER
+   PHASE 2.1 - LANGGRAPH WORKFLOW EXPLAINER
 ========================================== */
 
 .explainer-panel,
