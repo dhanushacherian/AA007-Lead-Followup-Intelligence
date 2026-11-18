@@ -1,10 +1,10 @@
-This file is a merged representation of a subset of the codebase, containing files not matching ignore patterns, combined into a single document by Repomix.
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
 
 <file_summary>
 This section contains a summary of this file.
 
 <purpose>
-This file contains a packed representation of a subset of the repository's contents that is considered the most important context.
+This file contains a packed representation of the entire repository's contents.
 It is designed to be easily consumable by AI systems for analysis, code review,
 or other automated processes.
 </purpose>
@@ -32,7 +32,6 @@ The content is organized as follows:
 <notes>
 - Some files may have been excluded based on .gitignore rules and Repomix's configuration
 - Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
-- Files matching these patterns are excluded: AA007-Repomix.xml
 - Files matching patterns in .gitignore are excluded
 - Files matching default ignore patterns are excluded
 - Files are sorted by Git change count (files with more changes are at the bottom)
@@ -698,7 +697,6 @@ from app.services.audit_service import audit_service
 
 class LeadWorkflowState(TypedDict):
     """Shared state passed between AA007 LangGraph nodes."""
-
     lead: LeadRecord
     context: WorkflowContext | None
     graph_trace: Annotated[list[dict[str, str]], add]
@@ -706,17 +704,14 @@ class LeadWorkflowState(TypedDict):
 
 
 class LeadWorkflowGraph:
-    """Linear LangGraph orchestration for the AA007 lead workflow."""
+    """Deterministic LangGraph orchestration with conditional routing."""
 
-    NODE_ORDER = [
-        "initialize_context",
-        "lead_intake",
-        "recency",
-        "engagement",
-        "fit_sla",
-        "decision",
-        "finalize",
-    ]
+    ROUTE_NODES = {
+        "FOLLOW_UP_NOW": "route_follow_up_now",
+        "FOLLOW_UP_SOON": "route_follow_up_soon",
+        "NURTURE": "route_nurture",
+        "REQUEST_DATA": "route_request_data",
+    }
 
     def __init__(self):
         self.lead_intake_agent = LeadIntakeAgent()
@@ -733,6 +728,12 @@ class LeadWorkflowGraph:
         builder.add_node("engagement", self.engagement)
         builder.add_node("fit_sla", self.fit_sla)
         builder.add_node("decision", self.decision)
+
+        builder.add_node("route_follow_up_now", self.route_follow_up_now)
+        builder.add_node("route_follow_up_soon", self.route_follow_up_soon)
+        builder.add_node("route_nurture", self.route_nurture)
+        builder.add_node("route_request_data", self.route_request_data)
+
         builder.add_node("finalize", self.finalize)
 
         builder.add_edge(START, "initialize_context")
@@ -741,24 +742,26 @@ class LeadWorkflowGraph:
         builder.add_edge("recency", "engagement")
         builder.add_edge("engagement", "fit_sla")
         builder.add_edge("fit_sla", "decision")
-        builder.add_edge("decision", "finalize")
+
+        builder.add_conditional_edges(
+            "decision",
+            self.route_decision,
+            self.ROUTE_NODES,
+        )
+
+        for route_node in self.ROUTE_NODES.values():
+            builder.add_edge(route_node, "finalize")
+
         builder.add_edge("finalize", END)
 
         self.graph = builder.compile()
 
     @staticmethod
-    def _trace(
-        node: str,
-        status: str,
-    ) -> dict[str, str]:
-        return {
-            "node": node,
-            "status": status,
-        }
+    def _trace(node: str, status: str) -> dict[str, str]:
+        return {"node": node, "status": status}
 
     def initialize_context(self, state: LeadWorkflowState) -> dict:
         context = ContextBuilder.build(state["lead"])
-
         return {
             "context": context,
             "graph_trace": [
@@ -767,14 +770,8 @@ class LeadWorkflowGraph:
             ],
         }
 
-    def _run_agent(
-        self,
-        state: LeadWorkflowState,
-        node_name: str,
-        agent,
-    ) -> dict:
+    def _run_agent(self, state, node_name: str, agent) -> dict:
         context = state["context"]
-
         if context is None:
             raise RuntimeError("Workflow context was not initialized.")
 
@@ -789,33 +786,58 @@ class LeadWorkflowGraph:
         }
 
     def lead_intake(self, state: LeadWorkflowState) -> dict:
-        return self._run_agent(
-            state, "lead_intake", self.lead_intake_agent
-        )
+        return self._run_agent(state, "lead_intake", self.lead_intake_agent)
 
     def recency(self, state: LeadWorkflowState) -> dict:
-        return self._run_agent(
-            state, "recency", self.recency_agent
-        )
+        return self._run_agent(state, "recency", self.recency_agent)
 
     def engagement(self, state: LeadWorkflowState) -> dict:
-        return self._run_agent(
-            state, "engagement", self.engagement_agent
-        )
+        return self._run_agent(state, "engagement", self.engagement_agent)
 
     def fit_sla(self, state: LeadWorkflowState) -> dict:
-        return self._run_agent(
-            state, "fit_sla", self.fit_sla_agent
-        )
+        return self._run_agent(state, "fit_sla", self.fit_sla_agent)
 
     def decision(self, state: LeadWorkflowState) -> dict:
-        return self._run_agent(
-            state, "decision", self.decision_agent
-        )
+        return self._run_agent(state, "decision", self.decision_agent)
+
+    @staticmethod
+    def route_decision(state: LeadWorkflowState) -> str:
+        """Route using the deterministic decision-agent recommendation."""
+        context = state["context"]
+
+        if context is None or not context.agent_results:
+            return "REQUEST_DATA"
+
+        decision = context.agent_results[-1]
+        recommendation = decision.details.get("recommendation")
+
+        if recommendation not in LeadWorkflowGraph.ROUTE_NODES:
+            return "REQUEST_DATA"
+
+        return recommendation
+
+    def _record_route(self, node_name: str) -> dict:
+        return {
+            "graph_trace": [
+                self._trace(node_name, "started"),
+                self._trace(node_name, "completed"),
+            ],
+        }
+
+    def route_follow_up_now(self, state: LeadWorkflowState) -> dict:
+        return self._record_route("route_follow_up_now")
+
+    def route_follow_up_soon(self, state: LeadWorkflowState) -> dict:
+        return self._record_route("route_follow_up_soon")
+
+    def route_nurture(self, state: LeadWorkflowState) -> dict:
+        return self._record_route("route_nurture")
+
+    def route_request_data(self, state: LeadWorkflowState) -> dict:
+        return self._record_route("route_request_data")
 
     def finalize(self, state: LeadWorkflowState) -> dict:
         context = state["context"]
-
         if context is None:
             raise RuntimeError("Workflow context was not initialized.")
 
@@ -868,7 +890,6 @@ class LeadWorkflowGraph:
             "graph_trace": [],
             "response": None,
         }
-
         return self.graph.invoke(initial_state)
 
 
@@ -3245,7 +3266,7 @@ function App() {
 
       <section className="page-heading">
         <div>
-          <p className="eyebrow">AGENTIC AI MVP · PHASE 2.1</p>
+          <p className="eyebrow">AGENTIC AI MVP · PHASE 2.2</p>
           <h1>Lead Follow-up Intelligence</h1>
           <p className="page-description">
             Understand how specialized agents evaluate lead information,
@@ -3296,67 +3317,91 @@ function App() {
 
         <p className="workflow-intro">
           Each workflow run starts with one business lead record. The LangGraph
-          StateGraph executes a linear seven-node workflow: it initializes
-          shared context, runs the four existing analysis agents and the
-          decision agent, then finalizes the recommendation and audit record.
+          StateGraph executes the five-agent analysis sequence, then uses deterministic conditional routing to select one of four business paths before finalizing the recommendation and audit record.
         </p>
 
         <div className="workflow-flow">
-          <div className="flow-node">
-            <span>START</span>
-            <strong>Workflow Start</strong>
-            <small>Incoming lead</small>
-          </div>
-          <div className="flow-arrow">→</div>
-          <div className="flow-node context-node">
-            <span>01</span>
-            <strong>Initialize Context</strong>
-            <small>Build shared state</small>
-          </div>
-          <div className="flow-arrow">→</div>
-          <div className="flow-node agent-flow-node">
-            <span>02</span>
-            <strong>Lead Intake</strong>
-            <small>Validate lead data</small>
-          </div>
-          <div className="flow-arrow">→</div>
-          <div className="flow-node agent-flow-node">
-            <span>03</span>
-            <strong>Recency</strong>
-            <small>Evaluate contact age</small>
-          </div>
-          <div className="flow-arrow">→</div>
-          <div className="flow-node agent-flow-node">
-            <span>04</span>
-            <strong>Engagement</strong>
-            <small>Evaluate interactions</small>
-          </div>
-          <div className="flow-arrow">→</div>
-          <div className="flow-node agent-flow-node">
-            <span>05</span>
-            <strong>Fit &amp; SLA</strong>
-            <small>Check fit and deadlines</small>
-          </div>
-          <div className="flow-arrow">→</div>
-          <div className="flow-node decision-node">
-            <span>06</span>
-            <strong>Decision</strong>
-            <small>Apply deterministic rules</small>
-          </div>
-          <div className="flow-arrow">→</div>
-          <div className="flow-node context-node">
-            <span>07</span>
-            <strong>Finalize</strong>
-            <small>Response and audit</small>
-          </div>
-          <div className="flow-arrow">→</div>
-          <div className="flow-node">
-            <span>END</span>
-            <strong>Workflow Complete</strong>
-            <small>Final recommendation</small>
-          </div>
-        </div>
-      </section>
+  <div className="flow-node">
+    <span>START</span>
+    <strong>Workflow Start</strong>
+    <small>Incoming lead</small>
+  </div>
+
+  <div className="flow-arrow">→</div>
+
+  <div className="flow-node context-node">
+    <span>01</span>
+    <strong>Initialize Context</strong>
+    <small>Build shared state</small>
+  </div>
+
+  <div className="flow-arrow">→</div>
+
+  <div className="flow-node agent-flow-node">
+    <span>02–05</span>
+    <strong>Four Analysis Agents</strong>
+    <small>Intake, recency, engagement, fit &amp; SLA</small>
+  </div>
+
+  <div className="flow-arrow">→</div>
+
+  <div className="flow-node decision-node">
+    <span>06</span>
+    <strong>Decision Agent</strong>
+    <small>Apply deterministic rules</small>
+  </div>
+
+  <div className="flow-arrow">→</div>
+
+  <div
+    className="route-options"
+    style={{
+      display: "grid",
+      gridTemplateColumns: "repeat(2, minmax(150px, 1fr))",
+      gap: "12px",
+    }}
+  >
+    <div className="flow-node">
+      <span>ROUTE 1</span>
+      <strong>FOLLOW_UP_NOW</strong>
+      <small>Immediate follow-up</small>
+    </div>
+
+    <div className="flow-node">
+      <span>ROUTE 2</span>
+      <strong>FOLLOW_UP_SOON</strong>
+      <small>Follow up soon</small>
+    </div>
+
+    <div className="flow-node">
+      <span>ROUTE 3</span>
+      <strong>NURTURE</strong>
+      <small>Continue nurturing</small>
+    </div>
+
+    <div className="flow-node">
+      <span>ROUTE 4</span>
+      <strong>REQUEST_DATA</strong>
+      <small>Request missing data</small>
+    </div>
+  </div>
+
+  <div className="flow-arrow">→</div>
+
+  <div className="flow-node context-node">
+    <span>07</span>
+    <strong>Finalize</strong>
+    <small>Response and audit</small>
+  </div>
+
+  <div className="flow-arrow">→</div>
+
+  <div className="flow-node">
+    <span>END</span>
+    <strong>Workflow Complete</strong>
+    <small>Final recommendation</small>
+  </div>
+</div></section>
 
       <div className="workspace-grid">
         <aside className="panel lead-panel">
@@ -3493,7 +3538,7 @@ function App() {
                 {!running && <span aria-hidden="true">→</span>}
               </button>
               <p className="button-note">
-                Runs the seven-node LangGraph workflow against the selected lead record.
+                Runs the LangGraph workflow with deterministic conditional routing against the selected lead record.
               </p>
             </>
           )}
@@ -3729,7 +3774,7 @@ function App() {
 
       <footer className="footer">
         <span>AA007 · Lead Follow-up Prioritization Intelligence</span>
-        <span>Phase 2.1 · LangGraph linear orchestration with deterministic decisions</span>
+        <span>Phase 2.2 · LangGraph conditional routing with deterministic decisions</span>
       </footer>
     </main>
   );
@@ -3764,7 +3809,7 @@ allowed_origins = [
     origin.strip()
     for origin in os.getenv(
         "CORS_ORIGINS",
-        "http://127.0.0.1:5173"
+        "http://127.0.0.1:5173,http://127.0.0.1:5174"
     ).split(",")
     if origin.strip()
 ]
@@ -4092,6 +4137,7 @@ def test_workflow_records_langgraph_node_execution_order():
         "engagement",
         "fit_sla",
         "decision",
+        "route_follow_up_now",
         "finalize",
     ]
 
@@ -4130,18 +4176,82 @@ def test_workflow_records_started_and_completed_for_each_node():
             "engagement",
             "fit_sla",
             "decision",
+            "route_follow_up_now",
             "finalize",
         ]
         for status in ["started", "completed"]
     ]
 
     assert trace == expected_events
+
+
+def test_all_conditional_routes_are_recorded_in_audit():
+    seed_leads = {
+        lead.lead_id: lead
+        for lead in get_seed_leads()
+    }
+
+    scenarios = [
+        ("AA007-HOT-001", "FOLLOW_UP_NOW", "route_follow_up_now"),
+        ("AA007-WARM-001", "FOLLOW_UP_SOON", "route_follow_up_soon"),
+        ("AA007-STALE-001", "NURTURE", "route_nurture"),
+    ]
+
+    missing_lead = LeadRecord(
+        lead_id="AA007-MISSING-ROUTE-001",
+        contact=None,
+        source="Website",
+        age_days=2,
+        last_contact_date=date.today(),
+        declared_fit="HIGH",
+        stage=LeadStage.NEW,
+    )
+
+    scenarios.append(
+        (missing_lead.lead_id, "REQUEST_DATA", "route_request_data")
+    )
+    seed_leads[missing_lead.lead_id] = missing_lead
+
+    for lead_id, expected_recommendation, expected_route in scenarios:
+        response = client.post(
+            "/workflow/run",
+            json={"lead": seed_leads[lead_id].model_dump(mode="json")},
+        )
+
+        assert response.status_code == 200, lead_id
+        workflow_data = response.json()
+
+        assert workflow_data["recommendation"] == expected_recommendation
+
+        audit_response = client.get(
+            f"/audit/{workflow_data['audit_reference']}"
+        )
+        assert audit_response.status_code == 200
+
+        trace = audit_response.json()["graph_execution_trace"]
+
+        completed_routes = [
+            event["node"]
+            for event in trace
+            if event["status"] == "completed"
+            and event["node"].startswith("route_")
+        ]
+
+        assert completed_routes == [expected_route], lead_id
+        assert {
+            "node": expected_route,
+            "status": "started",
+        } in trace
+        assert {
+            "node": expected_route,
+            "status": "completed",
+        } in trace
 </file>
 
 <file path="README.md">
-# AA007 — Lead Follow-up Prioritization Intelligence
+# AA007 â€” Lead Follow-up Prioritization Intelligence
 
-**Agentic AI MVP | RealRails Agentic AI Internship | Phase 1.4 — Cloud Deployment | Phase 2.1 — LangGraph Linear Orchestration**
+**Agentic AI MVP | RealRails Agentic AI Internship | Phase 1.4 â€” Cloud Deployment | Phase 2.1 â€” LangGraph Linear Orchestration**
 
 ## 1. Project Overview
 
@@ -4177,16 +4287,16 @@ The application uses a **linear LangGraph StateGraph** to orchestrate the existi
 
 Execution follows this sequence:
 
-**START → Initialize Context → Lead Intake → Recency → Engagement → Fit & SLA → Decision → Finalize → END**
+**START â†’ Initialize Context â†’ Lead Intake â†’ Recency â†’ Engagement â†’ Fit & SLA â†’ Decision â†’ Finalize â†’ END**
 
 The graph contains seven execution nodes:
-- `initialize_context` — creates the run-scoped workflow context.
-- `lead_intake` — validates the lead information.
-- `recency` — evaluates the last contact date.
-- `engagement` — evaluates engagement activity.
-- `fit_sla` — evaluates lead fit and follow-up SLA.
-- `decision` — applies the existing deterministic business rules.
-- `finalize` — prepares the response and records the audit information.
+- `initialize_context` â€” creates the run-scoped workflow context.
+- `lead_intake` â€” validates the lead information.
+- `recency` â€” evaluates the last contact date.
+- `engagement` â€” evaluates engagement activity.
+- `fit_sla` â€” evaluates lead fit and follow-up SLA.
+- `decision` â€” applies the existing deterministic business rules.
+- `finalize` â€” prepares the response and records the audit information.
 
 The five existing agents and their deterministic business rules are preserved. Graph execution events are recorded in the audit trace.
 
@@ -4205,10 +4315,10 @@ The context remains run-scoped and is not permanent memory.
 
 The workflow produces one of four recommendations:
 
-- `FOLLOW_UP_NOW` — Immediate follow-up is required.
-- `FOLLOW_UP_SOON` — Follow-up should be scheduled soon.
-- `NURTURE` — Continue nurturing the lead rather than prioritizing immediate follow-up.
-- `REQUEST_DATA` — Request missing mandatory information.
+- `FOLLOW_UP_NOW` â€” Immediate follow-up is required.
+- `FOLLOW_UP_SOON` â€” Follow-up should be scheduled soon.
+- `NURTURE` â€” Continue nurturing the lead rather than prioritizing immediate follow-up.
+- `REQUEST_DATA` â€” Request missing mandatory information.
 
 ## 7. Deterministic Decision Rules
 
@@ -4347,7 +4457,7 @@ npm.cmd run build
 
 ### Verified development results
 
-- Backend tests: 13 passed.
+- Backend tests: 16 passed in the latest Phase 2.2 validation.
 - Frontend TypeScript compilation: passed.
 - Vite production build: passed.
 - HOT, WARM and STALE sample scenarios: passed.
@@ -4362,7 +4472,7 @@ This project is a deterministic MVP.
 - Audit records are stored in memory.
 - The project does not claim persistent database storage or permanent memory.
 
-## 15. Cloud Deployment — Phase 1.4
+## 15. Cloud Deployment â€” Phase 1.4
 
 The application is deployed on Render.
 
@@ -4408,11 +4518,11 @@ https://github.com/dhanushacherian/AA007-Lead-Followup-Intelligence
 
 ---
 
-**AA007 — Lead Follow-up Prioritization Intelligence**
+**AA007 â€” Lead Follow-up Prioritization Intelligence**
 
 *Explainable deterministic multi-agent workflow for sales lead prioritization.*
 
-## 16. Phase 2.1 — LangGraph Linear Orchestration
+## 16. Phase 2.1 â€” LangGraph Linear Orchestration
 
 Phase 2.1 evolves the existing Phase 1 deterministic workflow into a linear LangGraph orchestration.
 
@@ -4440,6 +4550,39 @@ Phase 2.1 evolves the existing Phase 1 deterministic workflow into a linear Lang
 `ca050826837201dd7f003fe3b68cde8c993f83ad`
 
 **Project status:** Phase 1.4 deployment documentation retained. Phase 2.1 LangGraph linear orchestration implemented and committed.
+## 17. Phase 2.2 — Meaningful Conditional Routing
+
+Phase 2.2 extends the LangGraph workflow with deterministic conditional routing based on the existing decision-agent recommendations.
+
+### Conditional routes
+
+| Business condition | Recommendation | Graph route |
+|---|---|---|
+| Missing mandatory lead information | REQUEST_DATA | route_request_data |
+| Committed follow-up overdue | FOLLOW_UP_NOW | route_follow_up_now |
+| High fit, recent contact and high or moderate engagement | FOLLOW_UP_NOW | route_follow_up_now |
+| Stale contact and low engagement | NURTURE | route_nurture |
+| No earlier rule matched | FOLLOW_UP_SOON | route_follow_up_soon |
+
+### Implementation
+
+- Preserved the five existing specialized agents and their deterministic decision rules.
+- Added four conditional route nodes after the decision node.
+- Connected each route to the shared finalize node.
+- Recorded route start and completion events in the graph execution trace and audit record.
+- Preserved the existing workflow response and audit retrieval behavior.
+- Did not introduce random routing or invent weighted-score thresholds.
+
+### Latest validation
+
+- Backend tests: 16 passed.
+- Frontend TypeScript compilation: passed.
+- Vite production build: passed.
+- All four conditional routes verified by automated tests.
+- Repomix snapshot regenerated: `AA007-Repomix.xml`.
+- Repomix security check: no suspicious files detected.
+
+**Project status:** Phase 2.2 conditional routing implemented and automated validation passed. Live alternate-route evidence and final submission review remain part of the submission checklist.
 </file>
 
 </files>

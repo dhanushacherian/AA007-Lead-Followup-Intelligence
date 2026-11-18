@@ -205,7 +205,7 @@ function App() {
 
       <section className="page-heading">
         <div>
-          <p className="eyebrow">AGENTIC AI MVP · PHASE 2.1</p>
+          <p className="eyebrow">AGENTIC AI MVP · PHASE 2.2</p>
           <h1>Lead Follow-up Intelligence</h1>
           <p className="page-description">
             Understand how specialized agents evaluate lead information,
@@ -256,67 +256,91 @@ function App() {
 
         <p className="workflow-intro">
           Each workflow run starts with one business lead record. The LangGraph
-          StateGraph executes a linear seven-node workflow: it initializes
-          shared context, runs the four existing analysis agents and the
-          decision agent, then finalizes the recommendation and audit record.
+          StateGraph executes the five-agent analysis sequence, then uses deterministic conditional routing to select one of four business paths before finalizing the recommendation and audit record.
         </p>
 
         <div className="workflow-flow">
-          <div className="flow-node">
-            <span>START</span>
-            <strong>Workflow Start</strong>
-            <small>Incoming lead</small>
-          </div>
-          <div className="flow-arrow">→</div>
-          <div className="flow-node context-node">
-            <span>01</span>
-            <strong>Initialize Context</strong>
-            <small>Build shared state</small>
-          </div>
-          <div className="flow-arrow">→</div>
-          <div className="flow-node agent-flow-node">
-            <span>02</span>
-            <strong>Lead Intake</strong>
-            <small>Validate lead data</small>
-          </div>
-          <div className="flow-arrow">→</div>
-          <div className="flow-node agent-flow-node">
-            <span>03</span>
-            <strong>Recency</strong>
-            <small>Evaluate contact age</small>
-          </div>
-          <div className="flow-arrow">→</div>
-          <div className="flow-node agent-flow-node">
-            <span>04</span>
-            <strong>Engagement</strong>
-            <small>Evaluate interactions</small>
-          </div>
-          <div className="flow-arrow">→</div>
-          <div className="flow-node agent-flow-node">
-            <span>05</span>
-            <strong>Fit &amp; SLA</strong>
-            <small>Check fit and deadlines</small>
-          </div>
-          <div className="flow-arrow">→</div>
-          <div className="flow-node decision-node">
-            <span>06</span>
-            <strong>Decision</strong>
-            <small>Apply deterministic rules</small>
-          </div>
-          <div className="flow-arrow">→</div>
-          <div className="flow-node context-node">
-            <span>07</span>
-            <strong>Finalize</strong>
-            <small>Response and audit</small>
-          </div>
-          <div className="flow-arrow">→</div>
-          <div className="flow-node">
-            <span>END</span>
-            <strong>Workflow Complete</strong>
-            <small>Final recommendation</small>
-          </div>
-        </div>
-      </section>
+  <div className="flow-node">
+    <span>START</span>
+    <strong>Workflow Start</strong>
+    <small>Incoming lead</small>
+  </div>
+
+  <div className="flow-arrow">→</div>
+
+  <div className="flow-node context-node">
+    <span>01</span>
+    <strong>Initialize Context</strong>
+    <small>Build shared state</small>
+  </div>
+
+  <div className="flow-arrow">→</div>
+
+  <div className="flow-node agent-flow-node">
+    <span>02–05</span>
+    <strong>Four Analysis Agents</strong>
+    <small>Intake, recency, engagement, fit &amp; SLA</small>
+  </div>
+
+  <div className="flow-arrow">→</div>
+
+  <div className="flow-node decision-node">
+    <span>06</span>
+    <strong>Decision Agent</strong>
+    <small>Apply deterministic rules</small>
+  </div>
+
+  <div className="flow-arrow">→</div>
+
+  <div
+    className="route-options"
+    style={{
+      display: "grid",
+      gridTemplateColumns: "repeat(2, minmax(150px, 1fr))",
+      gap: "12px",
+    }}
+  >
+    <div className="flow-node">
+      <span>ROUTE 1</span>
+      <strong>FOLLOW_UP_NOW</strong>
+      <small>Immediate follow-up</small>
+    </div>
+
+    <div className="flow-node">
+      <span>ROUTE 2</span>
+      <strong>FOLLOW_UP_SOON</strong>
+      <small>Follow up soon</small>
+    </div>
+
+    <div className="flow-node">
+      <span>ROUTE 3</span>
+      <strong>NURTURE</strong>
+      <small>Continue nurturing</small>
+    </div>
+
+    <div className="flow-node">
+      <span>ROUTE 4</span>
+      <strong>REQUEST_DATA</strong>
+      <small>Request missing data</small>
+    </div>
+  </div>
+
+  <div className="flow-arrow">→</div>
+
+  <div className="flow-node context-node">
+    <span>07</span>
+    <strong>Finalize</strong>
+    <small>Response and audit</small>
+  </div>
+
+  <div className="flow-arrow">→</div>
+
+  <div className="flow-node">
+    <span>END</span>
+    <strong>Workflow Complete</strong>
+    <small>Final recommendation</small>
+  </div>
+</div></section>
 
       <div className="workspace-grid">
         <aside className="panel lead-panel">
@@ -453,7 +477,7 @@ function App() {
                 {!running && <span aria-hidden="true">→</span>}
               </button>
               <p className="button-note">
-                Runs the seven-node LangGraph workflow against the selected lead record.
+                Runs the LangGraph workflow with deterministic conditional routing against the selected lead record.
               </p>
             </>
           )}
@@ -689,7 +713,7 @@ function App() {
 
       <footer className="footer">
         <span>AA007 · Lead Follow-up Prioritization Intelligence</span>
-        <span>Phase 2.1 · LangGraph linear orchestration with deterministic decisions</span>
+        <span>Phase 2.2 · LangGraph conditional routing with deterministic decisions</span>
       </footer>
     </main>
   );

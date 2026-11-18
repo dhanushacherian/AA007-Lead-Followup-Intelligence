@@ -1,4 +1,4 @@
-﻿from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
 
@@ -266,6 +266,7 @@ def test_workflow_records_langgraph_node_execution_order():
         "engagement",
         "fit_sla",
         "decision",
+        "route_follow_up_now",
         "finalize",
     ]
 
@@ -304,9 +305,73 @@ def test_workflow_records_started_and_completed_for_each_node():
             "engagement",
             "fit_sla",
             "decision",
+            "route_follow_up_now",
             "finalize",
         ]
         for status in ["started", "completed"]
     ]
 
     assert trace == expected_events
+
+
+def test_all_conditional_routes_are_recorded_in_audit():
+    seed_leads = {
+        lead.lead_id: lead
+        for lead in get_seed_leads()
+    }
+
+    scenarios = [
+        ("AA007-HOT-001", "FOLLOW_UP_NOW", "route_follow_up_now"),
+        ("AA007-WARM-001", "FOLLOW_UP_SOON", "route_follow_up_soon"),
+        ("AA007-STALE-001", "NURTURE", "route_nurture"),
+    ]
+
+    missing_lead = LeadRecord(
+        lead_id="AA007-MISSING-ROUTE-001",
+        contact=None,
+        source="Website",
+        age_days=2,
+        last_contact_date=date.today(),
+        declared_fit="HIGH",
+        stage=LeadStage.NEW,
+    )
+
+    scenarios.append(
+        (missing_lead.lead_id, "REQUEST_DATA", "route_request_data")
+    )
+    seed_leads[missing_lead.lead_id] = missing_lead
+
+    for lead_id, expected_recommendation, expected_route in scenarios:
+        response = client.post(
+            "/workflow/run",
+            json={"lead": seed_leads[lead_id].model_dump(mode="json")},
+        )
+
+        assert response.status_code == 200, lead_id
+        workflow_data = response.json()
+
+        assert workflow_data["recommendation"] == expected_recommendation
+
+        audit_response = client.get(
+            f"/audit/{workflow_data['audit_reference']}"
+        )
+        assert audit_response.status_code == 200
+
+        trace = audit_response.json()["graph_execution_trace"]
+
+        completed_routes = [
+            event["node"]
+            for event in trace
+            if event["status"] == "completed"
+            and event["node"].startswith("route_")
+        ]
+
+        assert completed_routes == [expected_route], lead_id
+        assert {
+            "node": expected_route,
+            "status": "started",
+        } in trace
+        assert {
+            "node": expected_route,
+            "status": "completed",
+        } in trace
