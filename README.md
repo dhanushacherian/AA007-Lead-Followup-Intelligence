@@ -1,6 +1,6 @@
-﻿# AA007 â€” Lead Follow-up Prioritization Intelligence
+# AA007 — Lead Follow-up Prioritization Intelligence
 
-**Agentic AI MVP | RealRails Agentic AI Internship | Phase 1.4 â€” Cloud Deployment | Phase 2.1 â€” LangGraph Linear Orchestration**
+**Agentic AI MVP | RealRails Agentic AI Internship | Phase 1.4 — Cloud Deployment | Phase 2.1 — LangGraph Linear Orchestration**
 
 ## 1. Project Overview
 
@@ -36,16 +36,16 @@ The application uses a **linear LangGraph StateGraph** to orchestrate the existi
 
 Execution follows this sequence:
 
-**START â†’ Initialize Context â†’ Lead Intake â†’ Recency â†’ Engagement â†’ Fit & SLA â†’ Decision â†’ Finalize â†’ END**
+**START → Initialize Context → Lead Intake → Recency → Engagement → Fit & SLA → Decision → Finalize → END**
 
 The graph contains seven execution nodes:
-- `initialize_context` â€” creates the run-scoped workflow context.
-- `lead_intake` â€” validates the lead information.
-- `recency` â€” evaluates the last contact date.
-- `engagement` â€” evaluates engagement activity.
-- `fit_sla` â€” evaluates lead fit and follow-up SLA.
-- `decision` â€” applies the existing deterministic business rules.
-- `finalize` â€” prepares the response and records the audit information.
+- `initialize_context` — creates the run-scoped workflow context.
+- `lead_intake` — validates the lead information.
+- `recency` — evaluates the last contact date.
+- `engagement` — evaluates engagement activity.
+- `fit_sla` — evaluates lead fit and follow-up SLA.
+- `decision` — applies the existing deterministic business rules.
+- `finalize` — prepares the response and records the audit information.
 
 The five existing agents and their deterministic business rules are preserved. Graph execution events are recorded in the audit trace.
 
@@ -64,10 +64,10 @@ The context remains run-scoped and is not permanent memory.
 
 The workflow produces one of four recommendations:
 
-- `FOLLOW_UP_NOW` â€” Immediate follow-up is required.
-- `FOLLOW_UP_SOON` â€” Follow-up should be scheduled soon.
-- `NURTURE` â€” Continue nurturing the lead rather than prioritizing immediate follow-up.
-- `REQUEST_DATA` â€” Request missing mandatory information.
+- `FOLLOW_UP_NOW` — Immediate follow-up is required.
+- `FOLLOW_UP_SOON` — Follow-up should be scheduled soon.
+- `NURTURE` — Continue nurturing the lead rather than prioritizing immediate follow-up.
+- `REQUEST_DATA` — Request missing mandatory information.
 
 ## 7. Deterministic Decision Rules
 
@@ -221,7 +221,7 @@ This project is a deterministic MVP.
 - Audit records are stored in memory.
 - The project does not claim persistent database storage or permanent memory.
 
-## 15. Cloud Deployment â€” Phase 1.4
+## 15. Cloud Deployment — Phase 1.4
 
 The application is deployed on Render.
 
@@ -267,11 +267,11 @@ https://github.com/dhanushacherian/AA007-Lead-Followup-Intelligence
 
 ---
 
-**AA007 â€” Lead Follow-up Prioritization Intelligence**
+**AA007 — Lead Follow-up Prioritization Intelligence**
 
 *Explainable deterministic multi-agent workflow for sales lead prioritization.*
 
-## 16. Phase 2.1 â€” LangGraph Linear Orchestration
+## 16. Phase 2.1 — LangGraph Linear Orchestration
 
 Phase 2.1 evolves the existing Phase 1 deterministic workflow into a linear LangGraph orchestration.
 
@@ -333,3 +333,75 @@ Phase 2.2 extends the LangGraph workflow with deterministic conditional routing 
 
 **Project status:** Phase 2.2 conditional routing implemented and committed. All four conditional routes passed automated testing. Live NURTURE route execution and audit retrieval were successfully demonstrated. Backend tests, frontend compilation, production build and Repomix validation passed.
 
+---
+
+## 18. Phase 2.3 - Controlled LLM Enhancement
+
+Phase 2.3 introduces an optional LLM enhancement for sales-note summarization and intent tagging.
+
+### Architecture
+
+The five existing specialized agents and deterministic business rules remain unchanged.
+
+Workflow sequence:
+
+Initialize Context -> Lead Intake -> Recency -> Engagement -> Fit & SLA -> Decision -> LLM Enhancement -> Conditional Routing -> Finalize
+
+The LLM enhancement runs after the deterministic decision and before conditional routing. It does not replace deterministic decision authority.
+
+### LLM responsibilities
+
+- Summarize supplied sales notes.
+- Extract supported, non-sensitive intent tags.
+- Validate structured output.
+- Avoid inventing facts.
+- Use deterministic fallback when credentials are missing, provider calls fail, or output is invalid.
+
+### Supported intent tags
+
+- DEMO_INTEREST
+- PRICING_INTEREST
+- FUTURE_DECISION
+- PRODUCT_INTEREST
+- UNCLEAR
+
+### Reliability and audit
+
+The implementation includes a dedicated LLM service, configurable provider settings, bounded input and output lengths, structured output validation, deterministic fallback, and audit metadata.
+
+API keys and raw sales-note content are not included in LLM audit metadata.
+
+### Evaluation results
+
+| Scenario | Result |
+|---|---|
+| Normal sales-note input | PASS |
+| Ambiguous sales notes | PASS |
+| Invalid structured output rejected | PASS |
+| Malformed provider response fallback | PASS |
+| Provider timeout fallback | PASS |
+
+Backend tests: 21 passed.
+
+Architecture integration and structured output validation: PASS.
+
+### Configuration
+
+See backend/.env.example for the optional provider configuration template.
+
+Never commit real API credentials.
+
+### Current limitation
+
+Live OpenAI API execution has not yet been verified. The five evaluation scenarios used deterministic fallback and mocked provider responses.
+
+### Evaluation evidence
+
+See [Phase 2.3 Evaluation Evidence](docs/phase23-evidence/PHASE23_EVALUATION.md).
+
+### Phase 2.3 commits
+
+- Implementation: 9b9d7cc
+- Evaluation evidence: 1878119
+
+Project status: Phase 2.3 implementation and five-scenario evaluation completed. Live provider execution remains pending.
