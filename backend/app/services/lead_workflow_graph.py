@@ -1,5 +1,5 @@
 ﻿from operator import add
-from typing import Annotated, TypedDict
+from typing import Annotated, Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
@@ -13,6 +13,7 @@ from app.models.schemas import LeadRecord, WorkflowResponse
 from app.services.context_builder import ContextBuilder
 from app.services.workflow_context import WorkflowContext
 from app.services.audit_service import audit_service
+from app.services.llm_service import llm_service
 
 
 class LeadWorkflowState(TypedDict):
@@ -21,6 +22,7 @@ class LeadWorkflowState(TypedDict):
     context: WorkflowContext | None
     graph_trace: Annotated[list[dict[str, str]], add]
     response: WorkflowResponse | None
+    llm_result: dict[str, Any] | None
 
 
 class LeadWorkflowGraph:
@@ -48,6 +50,7 @@ class LeadWorkflowGraph:
         builder.add_node("engagement", self.engagement)
         builder.add_node("fit_sla", self.fit_sla)
         builder.add_node("decision", self.decision)
+        builder.add_node("llm_enhancement", self.llm_enhancement)
 
         builder.add_node("route_follow_up_now", self.route_follow_up_now)
         builder.add_node("route_follow_up_soon", self.route_follow_up_soon)
@@ -63,8 +66,10 @@ class LeadWorkflowGraph:
         builder.add_edge("engagement", "fit_sla")
         builder.add_edge("fit_sla", "decision")
 
+        builder.add_edge("decision", "llm_enhancement")
+
         builder.add_conditional_edges(
-            "decision",
+            "llm_enhancement",
             self.route_decision,
             self.ROUTE_NODES,
         )
@@ -120,6 +125,21 @@ class LeadWorkflowGraph:
     def decision(self, state: LeadWorkflowState) -> dict:
         return self._run_agent(state, "decision", self.decision_agent)
 
+    def llm_enhancement(self, state: LeadWorkflowState) -> dict:
+        """Add optional sales-note intent enhancement without changing decisions."""
+        context = state["context"]
+        if context is None:
+            raise RuntimeError("Workflow context was not initialized.")
+
+        result = llm_service.invoke(context.lead.sales_notes or "")
+        return {
+            "llm_result": result,
+            "graph_trace": [
+                self._trace("llm_enhancement", "started"),
+                self._trace("llm_enhancement", "completed"),
+            ],
+        }
+
     @staticmethod
     def route_decision(state: LeadWorkflowState) -> str:
         """Route using the deterministic decision-agent recommendation."""
@@ -174,6 +194,14 @@ class LeadWorkflowGraph:
         ]
 
         complete_trace = state["graph_trace"] + final_trace
+        llm_result = state.get("llm_result") or {}
+        llm_metadata = {
+            key: str(llm_result.get(key, ""))
+            for key in (
+                "llm_used", "provider", "model", "status",
+                "fallback_used", "validation_status"
+            )
+        }
 
         audit_reference = audit_service.record_workflow(
             workflow_id=context.workflow_id,
@@ -183,6 +211,7 @@ class LeadWorkflowGraph:
             recommendation=recommendation,
             errors=context.errors,
             graph_execution_trace=complete_trace,
+            llm_metadata=llm_metadata,
         )
 
         response = WorkflowResponse(
@@ -196,6 +225,9 @@ class LeadWorkflowGraph:
             evidence=context.evidence,
             audit_reference=audit_reference,
             errors=context.errors,
+            llm_summary=llm_result.get("summary"),
+            llm_intent_tags=llm_result.get("intent_tags", []),
+            llm_metadata=llm_metadata,
         )
 
         return {
@@ -209,6 +241,7 @@ class LeadWorkflowGraph:
             "context": None,
             "graph_trace": [],
             "response": None,
+            "llm_result": None,
         }
         return self.graph.invoke(initial_state)
 

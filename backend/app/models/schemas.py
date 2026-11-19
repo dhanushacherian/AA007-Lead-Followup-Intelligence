@@ -49,6 +49,7 @@ class LeadRecord(BaseModel):
     last_contact_date: date | None = None
     engagement_events: list[EngagementEvent] = Field(default_factory=list)
     declared_need: str | None = None
+    sales_notes: str | None = Field(default=None, max_length=4000)
     declared_fit: str | None = None
     stage: LeadStage | None = None
     pending_follow_up: PendingFollowUp = Field(default_factory=PendingFollowUp)
@@ -78,3 +79,6 @@ class WorkflowResponse(BaseModel):
     evidence: list[str] = Field(default_factory=list)
     audit_reference: str
     errors: list[str] = Field(default_factory=list)
+    llm_summary: str | None = None
+    llm_intent_tags: list[str] = Field(default_factory=list)
+    llm_metadata: dict[str, str] = Field(default_factory=dict)

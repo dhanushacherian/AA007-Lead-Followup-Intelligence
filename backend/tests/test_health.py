@@ -266,6 +266,7 @@ def test_workflow_records_langgraph_node_execution_order():
         "engagement",
         "fit_sla",
         "decision",
+        "llm_enhancement",
         "route_follow_up_now",
         "finalize",
     ]
@@ -305,6 +306,7 @@ def test_workflow_records_started_and_completed_for_each_node():
             "engagement",
             "fit_sla",
             "decision",
+            "llm_enhancement",
             "route_follow_up_now",
             "finalize",
         ]
