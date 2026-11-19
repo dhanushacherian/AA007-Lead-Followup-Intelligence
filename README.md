@@ -1,6 +1,6 @@
-# AA007 — Lead Follow-up Prioritization Intelligence
+﻿# AA007 â€” Lead Follow-up Prioritization Intelligence
 
-**Agentic AI MVP | RealRails Agentic AI Internship | Phase 1.4 — Cloud Deployment | Phase 2.1 — LangGraph Linear Orchestration**
+**Agentic AI MVP | RealRails Agentic AI Internship | Phase 1.4 â€” Cloud Deployment | Phase 2.1 â€” LangGraph Linear Orchestration**
 
 ## 1. Project Overview
 
@@ -36,16 +36,16 @@ The application uses a **linear LangGraph StateGraph** to orchestrate the existi
 
 Execution follows this sequence:
 
-**START → Initialize Context → Lead Intake → Recency → Engagement → Fit & SLA → Decision → Finalize → END**
+**START â†’ Initialize Context â†’ Lead Intake â†’ Recency â†’ Engagement â†’ Fit & SLA â†’ Decision â†’ Finalize â†’ END**
 
 The graph contains seven execution nodes:
-- `initialize_context` — creates the run-scoped workflow context.
-- `lead_intake` — validates the lead information.
-- `recency` — evaluates the last contact date.
-- `engagement` — evaluates engagement activity.
-- `fit_sla` — evaluates lead fit and follow-up SLA.
-- `decision` — applies the existing deterministic business rules.
-- `finalize` — prepares the response and records the audit information.
+- `initialize_context` â€” creates the run-scoped workflow context.
+- `lead_intake` â€” validates the lead information.
+- `recency` â€” evaluates the last contact date.
+- `engagement` â€” evaluates engagement activity.
+- `fit_sla` â€” evaluates lead fit and follow-up SLA.
+- `decision` â€” applies the existing deterministic business rules.
+- `finalize` â€” prepares the response and records the audit information.
 
 The five existing agents and their deterministic business rules are preserved. Graph execution events are recorded in the audit trace.
 
@@ -64,10 +64,10 @@ The context remains run-scoped and is not permanent memory.
 
 The workflow produces one of four recommendations:
 
-- `FOLLOW_UP_NOW` — Immediate follow-up is required.
-- `FOLLOW_UP_SOON` — Follow-up should be scheduled soon.
-- `NURTURE` — Continue nurturing the lead rather than prioritizing immediate follow-up.
-- `REQUEST_DATA` — Request missing mandatory information.
+- `FOLLOW_UP_NOW` â€” Immediate follow-up is required.
+- `FOLLOW_UP_SOON` â€” Follow-up should be scheduled soon.
+- `NURTURE` â€” Continue nurturing the lead rather than prioritizing immediate follow-up.
+- `REQUEST_DATA` â€” Request missing mandatory information.
 
 ## 7. Deterministic Decision Rules
 
@@ -221,7 +221,7 @@ This project is a deterministic MVP.
 - Audit records are stored in memory.
 - The project does not claim persistent database storage or permanent memory.
 
-## 15. Cloud Deployment — Phase 1.4
+## 15. Cloud Deployment â€” Phase 1.4
 
 The application is deployed on Render.
 
@@ -267,11 +267,11 @@ https://github.com/dhanushacherian/AA007-Lead-Followup-Intelligence
 
 ---
 
-**AA007 — Lead Follow-up Prioritization Intelligence**
+**AA007 â€” Lead Follow-up Prioritization Intelligence**
 
 *Explainable deterministic multi-agent workflow for sales lead prioritization.*
 
-## 16. Phase 2.1 — LangGraph Linear Orchestration
+## 16. Phase 2.1 â€” LangGraph Linear Orchestration
 
 Phase 2.1 evolves the existing Phase 1 deterministic workflow into a linear LangGraph orchestration.
 
@@ -299,7 +299,7 @@ Phase 2.1 evolves the existing Phase 1 deterministic workflow into a linear Lang
 `ca050826837201dd7f003fe3b68cde8c993f83ad`
 
 **Project status:** Phase 1.4 deployment documentation retained. Phase 2.1 LangGraph linear orchestration implemented and committed.
-## 17. Phase 2.2 — Meaningful Conditional Routing
+## 17. Phase 2.2 â€” Meaningful Conditional Routing
 
 Phase 2.2 extends the LangGraph workflow with deterministic conditional routing based on the existing decision-agent recommendations.
 
@@ -405,3 +405,4 @@ See [Phase 2.3 Evaluation Evidence](docs/phase23-evidence/PHASE23_EVALUATION.md)
 - Evaluation evidence: 1878119
 
 Project status: Phase 2.3 implementation and five-scenario evaluation completed. Live provider execution remains pending.
+
