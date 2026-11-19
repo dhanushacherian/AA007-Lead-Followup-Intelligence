@@ -1,4 +1,4 @@
-﻿# AA007 â€” Lead Follow-up Prioritization Intelligence
+# AA007 â€” Lead Follow-up Prioritization Intelligence
 
 **Agentic AI MVP | RealRails Agentic AI Internship | Phase 1.4 â€” Cloud Deployment | Phase 2.1 â€” LangGraph Linear Orchestration**
 
@@ -405,4 +405,3 @@ See [Phase 2.3 Evaluation Evidence](docs/phase23-evidence/PHASE23_EVALUATION.md)
 - Evaluation evidence: 1878119
 
 Project status: Phase 2.3 implementation and five-scenario evaluation completed. Live provider execution remains pending.
-
