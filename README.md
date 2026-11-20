@@ -1,6 +1,6 @@
-# AA007 â€” Lead Follow-up Prioritization Intelligence
+# AA007 - Lead Follow-up Prioritization Intelligence
 
-**Agentic AI MVP | RealRails Agentic AI Internship | Phase 1.4 â€” Cloud Deployment | Phase 2.1 â€” LangGraph Linear Orchestration**
+**Agentic AI MVP | RealRails Agentic AI Internship | Phase 1.4 - Cloud Deployment | Phase 2.1 - LangGraph Linear Orchestration | Phase 2.2 - Conditional Routing | Phase 2.3 - Controlled LLM Enhancement**
 
 ## 1. Project Overview
 
