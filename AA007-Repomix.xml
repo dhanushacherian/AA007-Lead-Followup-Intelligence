@@ -56,6 +56,8 @@ docs/
   course-guides/
     02_Controlled_LLM_and_Evaluation_Guide.md
     AA007_Product_Bible.md
+  phase2-evidence/
+    llm-service-tests.txt
   phase23-evidence/
     PHASE23_EVALUATION.md
   PHASE1.3_DOCKER_VALIDATION.md
@@ -88,7 +90,19 @@ frontend/
 .dockerignore
 .gitignore
 compose.yaml
-README.md</directory_structure><files>This section contains the contents of the repository&apos;s files.<file path="backend/app/agents/__init__.py"></file><file path="backend/app/agents/common.py">from app.models.schemas import AgentResult
+README.md</directory_structure><files>This section contains the contents of the repository&apos;s files.<file path="docs/phase2-evidence/llm-service-tests.txt">============================= test session starts =============================
+platform win32 -- Python 3.13.15, pytest-9.2.0, pluggy-1.7.0 -- C:\Users\LENOVO\Documents\AA007-Lead-Followup-Intelligence\backend\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\LENOVO\Documents\AA007-Lead-Followup-Intelligence
+collecting ... collected 5 items
+
+backend/tests/test_llm_service.py::test_fallback_extracts_supported_intent_tags PASSED [ 20%]
+backend/tests/test_llm_service.py::test_empty_notes_use_unclear_fallback PASSED [ 40%]
+backend/tests/test_llm_service.py::test_valid_structured_output_is_accepted PASSED [ 60%]
+backend/tests/test_llm_service.py::test_invalid_intent_tag_is_rejected PASSED [ 80%]
+backend/tests/test_llm_service.py::test_provider_timeout_uses_deterministic_fallback PASSED [100%]
+
+============================== 5 passed in 0.11s ==============================</file><file path="backend/app/agents/__init__.py"></file><file path="backend/app/agents/common.py">from app.models.schemas import AgentResult
 from app.services.workflow_context import WorkflowContext
 
 
@@ -4413,6 +4427,12 @@ function App() {
 }
 
 export default App;</file><file path="backend/app/main.py">import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Load backend/.env before importing workflow services.
+load_dotenv(Path(__file__).resolve().parent / &quot;.env&quot;)
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
