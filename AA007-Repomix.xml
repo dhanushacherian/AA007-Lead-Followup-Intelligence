@@ -90,19 +90,7 @@ frontend/
 .dockerignore
 .gitignore
 compose.yaml
-README.md</directory_structure><files>This section contains the contents of the repository&apos;s files.<file path="docs/phase2-evidence/llm-service-tests.txt">============================= test session starts =============================
-platform win32 -- Python 3.13.15, pytest-9.2.0, pluggy-1.7.0 -- C:\Users\LENOVO\Documents\AA007-Lead-Followup-Intelligence\backend\.venv\Scripts\python.exe
-cachedir: .pytest_cache
-rootdir: C:\Users\LENOVO\Documents\AA007-Lead-Followup-Intelligence
-collecting ... collected 5 items
-
-backend/tests/test_llm_service.py::test_fallback_extracts_supported_intent_tags PASSED [ 20%]
-backend/tests/test_llm_service.py::test_empty_notes_use_unclear_fallback PASSED [ 40%]
-backend/tests/test_llm_service.py::test_valid_structured_output_is_accepted PASSED [ 60%]
-backend/tests/test_llm_service.py::test_invalid_intent_tag_is_rejected PASSED [ 80%]
-backend/tests/test_llm_service.py::test_provider_timeout_uses_deterministic_fallback PASSED [100%]
-
-============================== 5 passed in 0.11s ==============================</file><file path="backend/app/agents/__init__.py"></file><file path="backend/app/agents/common.py">from app.models.schemas import AgentResult
+README.md</directory_structure><files>This section contains the contents of the repository&apos;s files.<file path="backend/app/agents/__init__.py"></file><file path="backend/app/agents/common.py">from app.models.schemas import AgentResult
 from app.services.workflow_context import WorkflowContext
 
 
@@ -739,12 +727,37 @@ def add_workflow_error(
     message: str,
 ) -&gt; None:
     &quot;&quot;&quot;Record an error without losing the workflow context.&quot;&quot;&quot;
-    context.errors.append(message)</file><file path="backend/app/__init__.py"></file><file path="backend/tests/__init__.py"></file><file path="backend/tests/test_llm_service.py">from unittest.mock import patch
+    context.errors.append(message)</file><file path="backend/app/__init__.py"></file><file path="backend/tests/__init__.py"></file><file path="backend/tests/test_llm_service.py">import json
+from unittest.mock import patch
 
 import httpx
 import pytest
 
 from app.services.llm_service import LLMService
+
+
+def configured_service():
+    service = LLMService()
+    service.api_key = &quot;test-key&quot;
+    service.model = &quot;test-model&quot;
+    service.provider = &quot;openai&quot;
+    return service
+
+
+def mocked_provider_response(content):
+    response = type(&quot;MockResponse&quot;, (), {})()
+    response.raise_for_status = lambda: None
+    response.json = lambda: {
+        &quot;choices&quot;: [
+            {
+                &quot;message&quot;: {
+                    &quot;content&quot;: content
+                }
+            }
+        ]
+    }
+
+    return response
 
 
 def test_fallback_extracts_supported_intent_tags():
@@ -772,6 +785,36 @@ def test_empty_notes_use_unclear_fallback():
     assert result[&quot;intent_tags&quot;] == [&quot;UNCLEAR&quot;]
 
 
+def test_ambiguous_notes_use_unclear_fallback():
+    service = LLMService()
+    service.api_key = &quot;&quot;
+    service.model = &quot;&quot;
+
+    result = service.invoke(
+        &quot;We had a brief conversation. No clear requirement was recorded.&quot;
+    )
+
+    assert result[&quot;fallback_used&quot;] is True
+    assert result[&quot;intent_tags&quot;] == [&quot;UNCLEAR&quot;]
+
+
+def test_domain_specific_notes_extract_multiple_supported_tags():
+    service = LLMService()
+    service.api_key = &quot;&quot;
+    service.model = &quot;&quot;
+
+    result = service.invoke(
+        &quot;Customer asked about product features, pricing, &quot;
+        &quot;and a demo before deciding next quarter.&quot;
+    )
+
+    assert result[&quot;fallback_used&quot;] is True
+    assert &quot;PRODUCT_INTEREST&quot; in result[&quot;intent_tags&quot;]
+    assert &quot;PRICING_INTEREST&quot; in result[&quot;intent_tags&quot;]
+    assert &quot;DEMO_INTEREST&quot; in result[&quot;intent_tags&quot;]
+    assert &quot;FUTURE_DECISION&quot; in result[&quot;intent_tags&quot;]
+
+
 def test_valid_structured_output_is_accepted():
     service = LLMService()
 
@@ -794,10 +837,46 @@ def test_invalid_intent_tag_is_rejected():
         })
 
 
+def test_valid_mocked_provider_response_is_accepted():
+    service = configured_service()
+
+    content = json.dumps({
+        &quot;summary&quot;: &quot;Customer requested a product demonstration.&quot;,
+        &quot;intent_tags&quot;: [&quot;DEMO_INTEREST&quot;],
+    })
+
+    with patch(&quot;app.services.llm_service.httpx.Client&quot;) as mock_client:
+        mock_client.return_value.__enter__.return_value.post.return_value = (
+            mocked_provider_response(content)
+        )
+
+        result = service.invoke(&quot;Customer wants a product demo.&quot;)
+
+    assert result[&quot;llm_used&quot;] is True
+    assert result[&quot;fallback_used&quot;] is False
+    assert result[&quot;status&quot;] == &quot;success&quot;
+    assert result[&quot;validation_status&quot;] == &quot;passed&quot;
+    assert result[&quot;intent_tags&quot;] == [&quot;DEMO_INTEREST&quot;]
+
+
+def test_malformed_provider_json_uses_deterministic_fallback():
+    service = configured_service()
+
+    with patch(&quot;app.services.llm_service.httpx.Client&quot;) as mock_client:
+        mock_client.return_value.__enter__.return_value.post.return_value = (
+            mocked_provider_response(&quot;{invalid-json&quot;)
+        )
+
+        result = service.invoke(&quot;Customer wants a product demo.&quot;)
+
+    assert result[&quot;fallback_used&quot;] is True
+    assert result[&quot;llm_used&quot;] is False
+    assert result[&quot;status&quot;] == &quot;fallback&quot;
+    assert &quot;DEMO_INTEREST&quot; in result[&quot;intent_tags&quot;]
+
+
 def test_provider_timeout_uses_deterministic_fallback():
-    service = LLMService()
-    service.api_key = &quot;test-key&quot;
-    service.model = &quot;test-model&quot;
+    service = configured_service()
 
     with patch(&quot;app.services.llm_service.httpx.Client&quot;) as mock_client:
         mock_client.return_value.__enter__.return_value.post.side_effect = (
@@ -808,6 +887,41 @@ def test_provider_timeout_uses_deterministic_fallback():
 
     assert result[&quot;fallback_used&quot;] is True
     assert result[&quot;llm_used&quot;] is False
+    assert &quot;DEMO_INTEREST&quot; in result[&quot;intent_tags&quot;]
+
+
+def test_provider_http_error_uses_deterministic_fallback():
+    service = configured_service()
+
+    request = httpx.Request(
+        &quot;POST&quot;,
+        &quot;https://api.openai.com/v1/chat/completions&quot;,
+    )
+    response = httpx.Response(
+        503,
+        request=request,
+    )
+    provider_error = httpx.HTTPStatusError(
+        &quot;Simulated provider error&quot;,
+        request=request,
+        response=response,
+    )
+
+    mock_response = mocked_provider_response(&quot;{}&quot;)
+    mock_response.raise_for_status = lambda: (_ for _ in ()).throw(
+        provider_error
+    )
+
+    with patch(&quot;app.services.llm_service.httpx.Client&quot;) as mock_client:
+        mock_client.return_value.__enter__.return_value.post.return_value = (
+            mock_response
+        )
+
+        result = service.invoke(&quot;Customer wants a product demo.&quot;)
+
+    assert result[&quot;fallback_used&quot;] is True
+    assert result[&quot;llm_used&quot;] is False
+    assert result[&quot;status&quot;] == &quot;fallback&quot;
     assert &quot;DEMO_INTEREST&quot; in result[&quot;intent_tags&quot;]</file><file path="backend/.env.example"># Optional controlled LLM enhancement configuration
 # Never commit real API keys.
 
@@ -1351,7 +1465,24 @@ When this Product Bible is given to an AI assistant together with a RealRails Gi
 3. Use the **generic RealRails feeder documents** as the engineering method.
 4. Use the latest **Repomix** as the implementation truth.
 5. Use **ABIP only as an architecture-learning reference**.
-6. Do not invent unrelated features, agents, data, or future-phase technologies.</file><file path="docs/phase23-evidence/PHASE23_EVALUATION.md"># AA007 Phase 2.3 - Evaluation Results
+6. Do not invent unrelated features, agents, data, or future-phase technologies.</file><file path="docs/phase2-evidence/llm-service-tests.txt">============================= test session starts =============================
+platform win32 -- Python 3.13.15, pytest-9.2.0, pluggy-1.7.0 -- C:\Users\LENOVO\Documents\AA007-Lead-Followup-Intelligence\backend\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\LENOVO\Documents\AA007-Lead-Followup-Intelligence\backend
+collecting ... collected 10 items
+
+tests/test_llm_service.py::test_fallback_extracts_supported_intent_tags PASSED [ 10%]
+tests/test_llm_service.py::test_empty_notes_use_unclear_fallback PASSED  [ 20%]
+tests/test_llm_service.py::test_ambiguous_notes_use_unclear_fallback PASSED [ 30%]
+tests/test_llm_service.py::test_domain_specific_notes_extract_multiple_supported_tags PASSED [ 40%]
+tests/test_llm_service.py::test_valid_structured_output_is_accepted PASSED [ 50%]
+tests/test_llm_service.py::test_invalid_intent_tag_is_rejected PASSED    [ 60%]
+tests/test_llm_service.py::test_valid_mocked_provider_response_is_accepted PASSED [ 70%]
+tests/test_llm_service.py::test_malformed_provider_json_uses_deterministic_fallback PASSED [ 80%]
+tests/test_llm_service.py::test_provider_timeout_uses_deterministic_fallback PASSED [ 90%]
+tests/test_llm_service.py::test_provider_http_error_uses_deterministic_fallback PASSED [100%]
+
+============================= 10 passed in 0.13s ==============================</file><file path="docs/phase23-evidence/PHASE23_EVALUATION.md"># AA007 Phase 2.3 - Evaluation Results
 
 Commit: 9b9d7cc
 
@@ -4722,6 +4853,28 @@ def test_workflow_audit_record_is_retrievable():
     assert isinstance(audit_data[&quot;execution_timestamp&quot;], str)
     assert isinstance(audit_data[&quot;triggered_rules&quot;], list)
     assert isinstance(audit_data[&quot;errors&quot;], list)
+
+    # Verify controlled LLM metadata is preserved in the audit record.
+    expected_metadata_fields = {
+        &quot;llm_used&quot;,
+        &quot;provider&quot;,
+        &quot;model&quot;,
+        &quot;status&quot;,
+        &quot;fallback_used&quot;,
+        &quot;validation_status&quot;,
+    }
+
+    llm_metadata = audit_data[&quot;llm_metadata&quot;]
+
+    assert set(llm_metadata) == expected_metadata_fields
+    assert llm_metadata == workflow_data[&quot;llm_metadata&quot;]
+    assert llm_metadata[&quot;status&quot;] in {&quot;success&quot;, &quot;fallback&quot;}
+    assert llm_metadata[&quot;llm_used&quot;] in {&quot;True&quot;, &quot;False&quot;}
+    assert llm_metadata[&quot;fallback_used&quot;] in {&quot;True&quot;, &quot;False&quot;}
+    assert llm_metadata[&quot;validation_status&quot;] in {
+        &quot;passed&quot;,
+        &quot;not_applicable&quot;,
+    }
 
 
 def test_audit_record_contains_all_five_agents_in_order():

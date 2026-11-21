@@ -208,6 +208,28 @@ def test_workflow_audit_record_is_retrievable():
     assert isinstance(audit_data["triggered_rules"], list)
     assert isinstance(audit_data["errors"], list)
 
+    # Verify controlled LLM metadata is preserved in the audit record.
+    expected_metadata_fields = {
+        "llm_used",
+        "provider",
+        "model",
+        "status",
+        "fallback_used",
+        "validation_status",
+    }
+
+    llm_metadata = audit_data["llm_metadata"]
+
+    assert set(llm_metadata) == expected_metadata_fields
+    assert llm_metadata == workflow_data["llm_metadata"]
+    assert llm_metadata["status"] in {"success", "fallback"}
+    assert llm_metadata["llm_used"] in {"True", "False"}
+    assert llm_metadata["fallback_used"] in {"True", "False"}
+    assert llm_metadata["validation_status"] in {
+        "passed",
+        "not_applicable",
+    }
+
 
 def test_audit_record_contains_all_five_agents_in_order():
     response = client.post(
