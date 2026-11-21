@@ -1,10 +1,10 @@
-import os
+﻿import os
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 # Load backend/.env before importing workflow services.
-load_dotenv(Path(__file__).resolve().parent / ".env")
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -86,3 +86,4 @@ def get_audit_record(audit_reference: str):
         )
 
     return record
+
