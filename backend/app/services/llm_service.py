@@ -6,7 +6,7 @@ import httpx
 
 
 class LLMService:
-    """Optional sales-note summarization adapter."""
+    """Optional sales-note summarization adapter with provider support."""
 
     ALLOWED_TAGS = {
         "DEMO_INTEREST",
@@ -101,6 +101,65 @@ class LLMService:
             "intent_tags": sorted(set(tags)),
         }
 
+    def _call_openai(self, notes: str) -> Any:
+        with httpx.Client(timeout=self.timeout) as client:
+            response = client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": self.model,
+                    "messages": self.build_prompt(notes),
+                    "response_format": {"type": "json_object"},
+                    "temperature": 0,
+                },
+            )
+            response.raise_for_status()
+
+        content = response.json()["choices"][0]["message"]["content"]
+        return json.loads(content)
+
+    def _call_gemini(self, notes: str) -> Any:
+        prompt = self.build_prompt(notes)
+
+        system_instruction = prompt[0]["content"]
+        user_content = prompt[1]["content"]
+
+        url = (
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{self.model}:generateContent"
+        )
+
+        with httpx.Client(timeout=self.timeout) as client:
+            response = client.post(
+                url,
+                headers={
+                    "x-goog-api-key": self.api_key,
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "systemInstruction": {
+                        "parts": [{"text": system_instruction}]
+                    },
+                    "contents": [
+                        {
+                            "role": "user",
+                            "parts": [{"text": user_content}],
+                        }
+                    ],
+                    "generationConfig": {
+                        "temperature": 0,
+                        "responseMimeType": "application/json",
+                    },
+                },
+            )
+            response.raise_for_status()
+
+        content = response.json()["candidates"][0]["content"]["parts"][0]["text"]
+        return json.loads(content)
+
     def invoke(self, notes: str) -> dict[str, Any]:
         if not notes or not notes.strip():
             return self.fallback("")
@@ -110,28 +169,15 @@ class LLMService:
         if not self.api_key or not self.model:
             return self.fallback(notes)
 
-        if self.provider != "openai":
-            return self.fallback(notes)
-
         try:
-            with httpx.Client(timeout=self.timeout) as client:
-                response = client.post(
-                    "https://api.openai.com/v1/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {self.api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json={
-                        "model": self.model,
-                        "messages": self.build_prompt(notes),
-                        "response_format": {"type": "json_object"},
-                        "temperature": 0,
-                    },
-                )
-                response.raise_for_status()
+            if self.provider == "openai":
+                raw_output = self._call_openai(notes)
+            elif self.provider == "gemini":
+                raw_output = self._call_gemini(notes)
+            else:
+                return self.fallback(notes)
 
-            content = response.json()["choices"][0]["message"]["content"]
-            validated = self.validate_output(json.loads(content))
+            validated = self.validate_output(raw_output)
 
             return {
                 **validated,
