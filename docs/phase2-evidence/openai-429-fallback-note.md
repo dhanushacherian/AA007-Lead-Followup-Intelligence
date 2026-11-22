@@ -1,8 +1,8 @@
 ﻿# OpenAI HTTP 429 Failure and Deterministic Fallback
 
-**Project:** AA007 - Lead Follow-up Prioritization Intelligence  
-**Phase:** 2.3 - Controlled LLM Enhancement  
-**Record type:** Retrospective incident note  
+**Project:** AA007 - Lead Follow-up Prioritization Intelligence
+**Phase:** 2.3 - Controlled LLM Enhancement
+**Record type:** Retrospective incident note
 **Documentation date:** 2026-11-22
 
 ## 1. Observed provider failure
