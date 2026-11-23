@@ -12,26 +12,36 @@ import {
 } from "./api";
 import "./App.css";
 
-const agentGuides: Record<string, { responsibility: string; inputs: string }> = {
-  "Lead Intake Agent": {
-    responsibility: "Checks whether essential lead information is available and valid.",
-    inputs: "Contact name, email or phone, lead stage and source.",
+type View = "overview" | "prioritize";
+
+const agentGuides: Record<string, string> = {
+  "Lead Intake Agent": "Checks whether essential lead information is available and valid.",
+  "Recency Agent": "Evaluates lead age and how recently the lead was contacted.",
+  "Engagement Agent": "Measures recorded engagement from the lead.",
+  "Fit & SLA Agent": "Checks declared lead fit and overdue follow-up commitments.",
+  "Lead Priority Decision Agent": "Combines agent findings and applies deterministic decision rules.",
+};
+
+const recommendationCopy: Record<string, { title: string; description: string; action: string }> = {
+  FOLLOW_UP_NOW: {
+    title: "Follow up now",
+    description: "This lead needs immediate attention based on the available follow-up signals.",
+    action: "Contact the lead as soon as practical and address the overdue commitment.",
   },
-  "Recency Agent": {
-    responsibility: "Evaluates how old the lead is and how recently the lead was contacted.",
-    inputs: "Lead age in days and last contact date.",
+  FOLLOW_UP_SOON: {
+    title: "Follow up soon",
+    description: "This lead should remain high on the team's upcoming follow-up list.",
+    action: "Schedule the next contact and keep the lead moving through the sales process.",
   },
-  "Engagement Agent": {
-    responsibility: "Measures the level of recorded engagement from the lead.",
-    inputs: "Engagement event count and event types.",
+  NURTURE: {
+    title: "Continue nurturing",
+    description: "The available signals suggest a lower immediate follow-up priority.",
+    action: "Continue appropriate nurturing and review again when new engagement is recorded.",
   },
-  "Fit & SLA Agent": {
-    responsibility: "Checks declared lead fit and whether a committed follow-up is overdue.",
-    inputs: "Declared fit, follow-up commitment and due date.",
-  },
-  "Lead Priority Decision Agent": {
-    responsibility: "Combines the preceding agent outputs and applies deterministic decision rules.",
-    inputs: "Intake status, recency, engagement, fit and SLA results.",
+  REQUEST_DATA: {
+    title: "Complete lead information",
+    description: "The system needs additional mandatory information before it can prioritize this lead reliably.",
+    action: "Review the lead record and provide the missing contact or stage information.",
   },
 };
 
@@ -41,6 +51,7 @@ function App() {
   const [selectedLeadId, setSelectedLeadId] = useState("");
   const [result, setResult] = useState<WorkflowResponse | null>(null);
   const [auditRecord, setAuditRecord] = useState<AuditRecord | null>(null);
+  const [view, setView] = useState<View>("overview");
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [auditLoading, setAuditLoading] = useState(false);
@@ -48,7 +59,6 @@ function App() {
   const [auditError, setAuditError] = useState("");
 
   const selectedLead = leads.find((lead) => lead.lead_id === selectedLeadId) ?? null;
-
   const attentionCount = useMemo(
     () => leads.filter((lead) => lead.pending_follow_up.committed).length,
     [leads]
@@ -59,42 +69,31 @@ function App() {
       try {
         setLoading(true);
         setError("");
-
-        const [healthData, leadData] = await Promise.all([
-          checkBackendHealth(),
-          getLeads(),
-        ]);
-
+        const [healthData, leadData] = await Promise.all([checkBackendHealth(), getLeads()]);
         setHealth(healthData);
         setLeads(leadData);
-
-        if (leadData.length > 0) {
-          setSelectedLeadId(leadData[0].lead_id);
-        }
+        if (leadData.length > 0) setSelectedLeadId(leadData[0].lead_id);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Unable to load dashboard.");
+        setError(err instanceof Error ? err.message : "Unable to load the application data.");
       } finally {
         setLoading(false);
       }
     }
-
-    loadDashboard();
+    void loadDashboard();
   }, []);
 
   async function handleRunWorkflow() {
     if (!selectedLead) return;
-
     try {
       setRunning(true);
       setError("");
       setAuditError("");
       setResult(null);
       setAuditRecord(null);
-
       const workflowResult = await runWorkflow(selectedLead);
       setResult(workflowResult);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Workflow execution failed.");
+      setError(err instanceof Error ? err.message : "Prioritization could not be completed.");
     } finally {
       setRunning(false);
     }
@@ -102,18 +101,14 @@ function App() {
 
   async function handleLoadAudit() {
     if (!result) return;
-
     try {
       setAuditLoading(true);
       setAuditError("");
       setAuditRecord(null);
-
       const record = await getAuditRecord(result.audit_reference);
       setAuditRecord(record);
     } catch (err) {
-      setAuditError(
-        err instanceof Error ? err.message : "Unable to retrieve audit record."
-      );
+      setAuditError(err instanceof Error ? err.message : "Unable to retrieve the audit record.");
     } finally {
       setAuditLoading(false);
     }
@@ -127,6 +122,10 @@ function App() {
     setAuditError("");
   }
 
+  function displayValue(value: string | null | undefined) {
+    return value || "Not provided";
+  }
+
   function recommendationClass(recommendation: string) {
     if (recommendation === "FOLLOW_UP_NOW") return "urgent";
     if (recommendation === "FOLLOW_UP_SOON") return "soon";
@@ -134,586 +133,293 @@ function App() {
     return "request";
   }
 
-  function displayValue(value: string | null | undefined) {
-    return value || "Not provided";
-  }
-
-  function formatDetails(details: Record<string, unknown>) {
-    return JSON.stringify(details, null, 2);
-  }
-
   function renderAgentCard(agent: AgentResult, index: number) {
-    const guide = agentGuides[agent.agent_name];
-
     return (
       <article className="agent-card" key={`${agent.agent_name}-${index}`}>
-        <div className="agent-card-top">
-          <span className="agent-number">STEP 0{index + 1}</span>
+        <div className="agent-card-heading">
+          <span className="step-number">0{index + 1}</span>
           <span className="agent-status">{agent.status}</span>
         </div>
-
         <h4>{agent.agent_name}</h4>
-        <p className="agent-responsibility">
-          {guide?.responsibility || "Processes its assigned workflow information."}
-        </p>
-
-        <div className="agent-input-box">
-          <strong>Important inputs</strong>
-          <p>{guide?.inputs || "See the structured output below."}</p>
-        </div>
-
-        <p className="agent-summary">{agent.summary}</p>
-
-        <div className="structured-output">
-          <strong>Structured output</strong>
-          <pre>{formatDetails(agent.details)}</pre>
-          {agent.score !== null && (
-            <p className="agent-score">Score: {agent.score}</p>
-          )}
-        </div>
-
+        <p>{agentGuides[agent.agent_name] || "Processes its assigned workflow information."}</p>
+        <strong className="detail-label">Agent summary</strong>
+        <p>{agent.summary}</p>
+        {agent.score !== null && <p className="agent-score">Score: {agent.score}</p>}
         {agent.evidence.length > 0 && (
-          <div className="agent-evidence">
-            <strong>Evidence produced</strong>
-            <ul>
-              {agent.evidence.map((item, evidenceIndex) => (
-                <li key={evidenceIndex}>{item}</li>
-              ))}
-            </ul>
-          </div>
+          <>
+            <strong className="detail-label">Evidence</strong>
+            <ul>{agent.evidence.map((item, i) => <li key={i}>{item}</li>)}</ul>
+          </>
         )}
+        <details className="raw-details">
+          <summary>View structured output</summary>
+          <pre>{JSON.stringify(agent.details, null, 2)}</pre>
+        </details>
       </article>
     );
   }
 
+  const recommendation = result ? recommendationCopy[result.recommendation] : null;
+
   return (
     <main className="app-shell">
       <header className="topbar">
-        <div className="brand">
-          <div className="brand-mark">A7</div>
-          <div>
-            <div className="brand-name">AA007 Intelligence</div>
-            <div className="brand-subtitle">Sales Operations · Lead Prioritization</div>
-          </div>
-        </div>
-
-        <div className="connection">
-          <span className={`status-dot ${health ? "online" : "offline"}`} />
-          <span>{health ? "Backend connected" : "Backend unavailable"}</span>
+        <a className="brand" href="#top" onClick={() => setView("overview")}>
+          <span className="brand-mark">A7</span>
+          <span>
+            <strong>Lead Follow-up Intelligence</strong>
+            <small>Sales Operations Workspace</small>
+          </span>
+        </a>
+        <div className="topbar-right">
+          <span className={`connection-pill ${health ? "connected" : "disconnected"}`}>
+            <span className="status-dot" />
+            {health ? "System connected" : "System unavailable"}
+          </span>
         </div>
       </header>
 
-      <section className="page-heading">
+      <nav className="main-nav" aria-label="Main navigation">
+        <button className={view === "overview" ? "nav-link active" : "nav-link"} onClick={() => setView("overview")}>Overview</button>
+        <button className={view === "prioritize" ? "nav-link active" : "nav-link"} onClick={() => setView("prioritize")}>Prioritize a lead</button>
+        {result && <span className="nav-result">Latest recommendation ready</span>}
+      </nav>
+
+      <section className="welcome-section" id="top">
         <div>
-          <p className="eyebrow">AGENTIC AI MVP · PHASE 2.2</p>
-          <h1>Lead Follow-up Intelligence</h1>
-          <p className="page-description">
-            Understand how specialized agents evaluate lead information,
-            share workflow context and produce evidence-based decisions.
+          <p className="eyebrow">AA007 · SALES OPERATIONS</p>
+          <h1>Make every follow-up count.</h1>
+          <p className="welcome-copy">
+            Review lead signals, understand follow-up priority, and decide what your team should do next.
           </p>
         </div>
-        <div className="system-label">
-          <span className="system-label-dot" />
-          Deterministic workflow engine
+        <div className="welcome-action">
+          <span className="engine-label"><span className="status-dot" /> Evidence-based prioritization</span>
+          <button className="primary-button" onClick={() => setView("prioritize")}>Prioritize a lead <span aria-hidden="true">→</span></button>
         </div>
       </section>
 
-      {error && <div className="error-banner">{error}</div>}
+      {error && <div className="error-banner" role="alert">{error}</div>}
 
-      <section className="metrics-grid">
-        <article className="metric-card">
-          <span className="metric-label">TOTAL LEADS</span>
-          <strong>{loading ? "—" : leads.length}</strong>
-          <span className="metric-note">Available sample records</span>
-        </article>
-        <article className="metric-card">
-          <span className="metric-label">COMMITTED FOLLOW-UPS</span>
-          <strong>{loading ? "—" : attentionCount}</strong>
-          <span className="metric-note">Require deadline evaluation</span>
-        </article>
-        <article className="metric-card">
-          <span className="metric-label">AGENT FRAMEWORK</span>
-          <strong>05</strong>
-          <span className="metric-note">Specialized workflow agents</span>
-        </article>
-        <article className="metric-card">
-          <span className="metric-label">WORKFLOW STATUS</span>
-          <strong className="metric-status">
-            {result ? "Complete" : running ? "Running" : "Ready"}
-          </strong>
-          <span className="metric-note">Current session</span>
-        </article>
-      </section>
+      {view === "overview" && (
+        <>
+          <section className="metrics-grid" aria-label="Lead overview">
+            <article className="metric-card">
+              <span className="metric-label">SAMPLE LEADS</span>
+              <strong>{loading ? "—" : leads.length}</strong>
+              <small>Available records to review</small>
+            </article>
+            <article className="metric-card">
+              <span className="metric-label">COMMITTED FOLLOW-UPS</span>
+              <strong>{loading ? "—" : attentionCount}</strong>
+              <small>Commitments evaluated by the workflow</small>
+            </article>
+            <article className="metric-card">
+              <span className="metric-label">DECISION OUTCOMES</span>
+              <strong>04</strong>
+              <small>Four supported recommendations</small>
+            </article>
+          </section>
 
-      <section className="explainer-panel">
-        <div className="section-title-row">
-          <div>
-            <p className="eyebrow">HOW THE SYSTEM WORKS</p>
-            <h2>Agent workflow architecture</h2>
-          </div>
-          <span className="count-badge">5 AGENTS</span>
-        </div>
-
-        <p className="workflow-intro">
-          Each workflow run starts with one business lead record. The LangGraph
-          StateGraph executes the five-agent analysis sequence, then uses deterministic conditional routing to select one of four business paths before finalizing the recommendation and audit record.
-        </p>
-
-        <div className="workflow-flow">
-  <div className="flow-node">
-    <span>START</span>
-    <strong>Workflow Start</strong>
-    <small>Incoming lead</small>
-  </div>
-
-  <div className="flow-arrow">→</div>
-
-  <div className="flow-node context-node">
-    <span>01</span>
-    <strong>Initialize Context</strong>
-    <small>Build shared state</small>
-  </div>
-
-  <div className="flow-arrow">→</div>
-
-  <div className="flow-node agent-flow-node">
-    <span>02–05</span>
-    <strong>Four Analysis Agents</strong>
-    <small>Intake, recency, engagement, fit &amp; SLA</small>
-  </div>
-
-  <div className="flow-arrow">→</div>
-
-  <div className="flow-node decision-node">
-    <span>06</span>
-    <strong>Decision Agent</strong>
-    <small>Apply deterministic rules</small>
-  </div>
-
-  <div className="flow-arrow">→</div>
-
-  <div
-    className="route-options"
-    style={{
-      display: "grid",
-      gridTemplateColumns: "repeat(2, minmax(150px, 1fr))",
-      gap: "12px",
-    }}
-  >
-    <div className="flow-node">
-      <span>ROUTE 1</span>
-      <strong>FOLLOW_UP_NOW</strong>
-      <small>Immediate follow-up</small>
-    </div>
-
-    <div className="flow-node">
-      <span>ROUTE 2</span>
-      <strong>FOLLOW_UP_SOON</strong>
-      <small>Follow up soon</small>
-    </div>
-
-    <div className="flow-node">
-      <span>ROUTE 3</span>
-      <strong>NURTURE</strong>
-      <small>Continue nurturing</small>
-    </div>
-
-    <div className="flow-node">
-      <span>ROUTE 4</span>
-      <strong>REQUEST_DATA</strong>
-      <small>Request missing data</small>
-    </div>
-  </div>
-
-  <div className="flow-arrow">→</div>
-
-  <div className="flow-node context-node">
-    <span>07</span>
-    <strong>Finalize</strong>
-    <small>Response and audit</small>
-  </div>
-
-  <div className="flow-arrow">→</div>
-
-  <div className="flow-node">
-    <span>END</span>
-    <strong>Workflow Complete</strong>
-    <small>Final recommendation</small>
-  </div>
-</div></section>
-
-      <div className="workspace-grid">
-        <aside className="panel lead-panel">
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">RECORDS</p>
-              <h2>Lead directory</h2>
-            </div>
-            <span className="count-badge">{leads.length}</span>
-          </div>
-
-          {loading ? (
-            <p className="muted">Loading leads...</p>
-          ) : leads.length === 0 ? (
-            <p className="muted">No lead records available.</p>
-          ) : (
-            <div className="lead-list">
-              {leads.map((lead) => (
-                <button
-                  className={`lead-item ${selectedLeadId === lead.lead_id ? "selected" : ""}`}
-                  key={lead.lead_id}
-                  onClick={() => selectLead(lead.lead_id)}
-                >
-                  <div className="lead-item-top">
-                    <span className="lead-id">{lead.lead_id}</span>
-                    <span className={`fit-tag ${(lead.declared_fit || "unknown").toLowerCase()}`}>
-                      {lead.declared_fit || "UNKNOWN"}
-                    </span>
-                  </div>
-                  <strong>{lead.contact?.name || "Unnamed lead"}</strong>
-                  <span className="lead-meta">
-                    {lead.stage || "No stage"} · {lead.age_days} days old
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div className="directory-note">
-            <span className="info-icon">i</span>
-            Select a lead to inspect its details and run the prioritization workflow.
-          </div>
-        </aside>
-
-        <section className="panel detail-panel">
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">BUSINESS INPUT</p>
-              <h2>Lead details</h2>
-            </div>
-            {selectedLead && <span className="record-label">Selected record</span>}
-          </div>
-
-          {!selectedLead ? (
-            <p className="muted">Select a lead to view its information.</p>
-          ) : (
-            <>
-              <div className="profile-header">
-                <div className="avatar">
-                  {(selectedLead.contact?.name || "L").charAt(0).toUpperCase()}
-                </div>
-                <div>
-                  <h3>{selectedLead.contact?.name || selectedLead.lead_id}</h3>
-                  <p>{selectedLead.contact?.email || selectedLead.lead_id}</p>
-                </div>
-              </div>
-
-              <div className="detail-grid">
-                <div className="detail-field">
-                  <span>Lead ID</span>
-                  <strong>{selectedLead.lead_id}</strong>
-                </div>
-                <div className="detail-field">
-                  <span>Source</span>
-                  <strong>{displayValue(selectedLead.source)}</strong>
-                </div>
-                <div className="detail-field">
-                  <span>Current stage</span>
-                  <strong>{displayValue(selectedLead.stage)}</strong>
-                </div>
-                <div className="detail-field">
-                  <span>Lead age</span>
-                  <strong>{selectedLead.age_days} days</strong>
-                </div>
-                <div className="detail-field">
-                  <span>Declared fit</span>
-                  <strong>{displayValue(selectedLead.declared_fit)}</strong>
-                </div>
-                <div className="detail-field">
-                  <span>Last contact</span>
-                  <strong>{displayValue(selectedLead.last_contact_date)}</strong>
-                </div>
-                <div className="detail-field full-width">
-                  <span>Declared need</span>
-                  <strong>{displayValue(selectedLead.declared_need)}</strong>
-                </div>
-                <div className="detail-field full-width">
-                  <span>Follow-up commitment</span>
-                  <strong>
-                    {selectedLead.pending_follow_up.committed ? "Committed" : "No committed follow-up"}
-                    {selectedLead.pending_follow_up.due_at
-                      ? ` · Due ${selectedLead.pending_follow_up.due_at}`
-                      : ""}
-                  </strong>
-                </div>
-              </div>
-
-              <div className="engagement-section">
-                <h3>Engagement history</h3>
-                {selectedLead.engagement_events.length === 0 ? (
-                  <p className="muted">No engagement events recorded.</p>
-                ) : (
-                  <div className="event-list">
-                    {selectedLead.engagement_events.map((event, index) => (
-                      <div className="event-item" key={`${event.event_type}-${index}`}>
-                        <span className="event-marker" />
-                        <div>
-                          <strong>{event.event_type}</strong>
-                          <p>{event.description || "No additional description"}</p>
-                          <span>{event.occurred_at}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <button
-                className="run-button"
-                onClick={handleRunWorkflow}
-                disabled={running || loading}
-              >
-                {running ? "Executing LangGraph workflow..." : "Run Prioritization"}
-                {!running && <span aria-hidden="true">→</span>}
-              </button>
-              <p className="button-note">
-                Runs the LangGraph workflow with deterministic conditional routing against the selected lead record.
-              </p>
-            </>
-          )}
-        </section>
-      </div>
-
-      <section className="results-section">
-        <div className="results-heading">
-          <div>
-            <p className="eyebrow">DECISION INTELLIGENCE</p>
-            <h2>Workflow results</h2>
-          </div>
-          <span className={`result-state ${result ? "complete" : ""}`}>
-            {running ? "PROCESSING" : result ? "COMPLETED" : "AWAITING EXECUTION"}
-          </span>
-        </div>
-
-        {!result && !running && (
-          <div className="empty-results">
-            <div className="empty-icon">◎</div>
-            <h3>No workflow results yet</h3>
-            <p>Select a lead and run prioritization to see the recommendation,
-              agent outputs, decision rules and supporting evidence.</p>
-          </div>
-        )}
-
-        {running && (
-          <div className="empty-results">
-            <div className="loading-spinner" />
-            <h3>Analyzing lead information</h3>
-            <p>The workflow agents are evaluating the selected record.</p>
-          </div>
-        )}
-
-        {result && (
-          <div className="result-content">
-            <section className="context-summary">
-              <div className="section-title-row">
-                <div>
-                  <p className="eyebrow">CURRENT WORKFLOW RUN</p>
-                  <h3>Run-scoped shared workflow context</h3>
-                </div>
-                <span className="record-label">Active run result</span>
-              </div>
-
-              <div className="context-grid">
-                <div className="context-item">
-                  <span>Workflow ID</span>
-                  <strong>{result.workflow_id}</strong>
-                </div>
-                <div className="context-item">
-                  <span>Lead ID</span>
-                  <strong>{result.lead_id}</strong>
-                </div>
-                <div className="context-item">
-                  <span>Agent results</span>
-                  <strong>{result.agent_outputs.length}</strong>
-                </div>
-                <div className="context-item">
-                  <span>Collected evidence</span>
-                  <strong>{result.evidence.length}</strong>
-                </div>
-                <div className="context-item">
-                  <span>Workflow errors</span>
-                  <strong>{result.errors.length}</strong>
-                </div>
-                <div className="context-item">
-                  <span>Audit reference</span>
-                  <strong>{result.audit_reference}</strong>
-                </div>
-              </div>
-              <p className="context-footnote">
-                Values above come from the completed workflow response. The
-                context is scoped to this execution and is not persistent memory.
-              </p>
-            </section>
-
-            <div className={`recommendation-card ${recommendationClass(result.recommendation)}`}>
+          <section className="section-block">
+            <div className="section-heading">
               <div>
-                <span className="recommendation-label">FINAL RECOMMENDATION</span>
-                <h3>{result.recommendation.replaceAll("_", " ")}</h3>
-                <p>Lead: {result.lead_id}</p>
+                <p className="eyebrow">GET STARTED</p>
+                <h2>Choose a lead to review</h2>
+                <p className="section-copy">Select one of the available sample records to see its business information and run prioritization.</p>
               </div>
-              <div className="recommendation-symbol">✓</div>
+              <button className="secondary-button" onClick={() => setView("prioritize")}>Open lead workspace →</button>
             </div>
-
-            <div className="result-columns">
-              <div className="result-panel">
-                <h3>Decision reasoning</h3>
-                {result.reasons.length > 0 ? (
-                  <ul className="evidence-list">
-                    {result.reasons.map((reason, index) => (
-                      <li key={index}>{reason}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="muted">No additional reasons returned.</p>
-                )}
-
-                <h3 className="subheading">Triggered rules</h3>
-                <div className="rule-list">
-                  {result.triggered_rules.length > 0 ? result.triggered_rules.map((rule) => (
-                    <span className="rule-chip" key={rule}>{rule}</span>
-                  )) : <span className="muted">No rules returned.</span>}
-                </div>
-              </div>
-
-              <div className="result-panel">
-                <h3>Execution audit</h3>
-                <div className="audit-field">
-                  <span>Workflow ID</span>
-                  <strong>{result.workflow_id}</strong>
-                </div>
-                <div className="audit-field">
-                  <span>Audit reference</span>
-                  <strong>{result.audit_reference}</strong>
-                </div>
-                <div className="audit-field">
-                  <span>Agent count</span>
-                  <strong>{result.agent_outputs.length}</strong>
-                </div>
-                <div className="audit-field">
-                  <span>Priority score</span>
-                  <strong>{result.priority_score ?? "Not scored"}</strong>
-                </div>
-              </div>
-            </div>
-
-            <div className="agents-panel">
-              <div className="section-title-row">
-                <div>
-                  <p className="eyebrow">MULTI-AGENT EXECUTION</p>
-                  <h3>Agent activity and structured outputs</h3>
-                </div>
-                <span className="count-badge">{result.agent_outputs.length} agents</span>
-              </div>
-
-              <p className="workflow-intro">
-                The four analysis agents evaluate the lead, and the decision
-                agent combines their outputs and evidence to produce the recommendation.
-              </p>
-
-              <div className="agent-grid">
-                {result.agent_outputs.map((agent, index) =>
-                  renderAgentCard(agent, index)
-                )}
-              </div>
-            </div>
-
-            <div className="evidence-panel">
-              <h3>Consolidated decision evidence</h3>
-              {result.evidence.length > 0 ? (
-                <ul className="evidence-list">
-                  {result.evidence.map((item, index) => (
-                    <li key={index}>{item}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="muted">No consolidated evidence returned.</p>
-              )}
-            </div>
-
-            <section className="audit-inspector">
-              <div className="section-title-row">
-                <div>
-                  <p className="eyebrow">RETRIEVABLE RECORD</p>
-                  <h3>Stored workflow audit</h3>
-                  <p className="muted">
-                    Retrieve the saved execution record using its audit reference.
-                  </p>
-                </div>
-                <button
-                  className="audit-button"
-                  onClick={handleLoadAudit}
-                  disabled={auditLoading}
-                >
-                  {auditLoading ? "Retrieving..." : "Retrieve audit record"}
-                </button>
-              </div>
-
-              {auditError && <div className="error-banner">{auditError}</div>}
-
-              {auditRecord && (
-                <div className="audit-record-content">
-                  <div className="audit-record-status">Audit record retrieved successfully</div>
-                  <div className="context-grid">
-                    <div className="context-item">
-                      <span>Audit reference</span>
-                      <strong>{auditRecord.audit_reference}</strong>
+            {loading ? (
+              <div className="empty-state"><span className="loader" />Loading sample leads…</div>
+            ) : leads.length === 0 ? (
+              <div className="empty-state">No sample leads are currently available. Check the backend connection and try again.</div>
+            ) : (
+              <div className="lead-grid">
+                {leads.map((lead) => (
+                  <button className="lead-card" key={lead.lead_id} onClick={() => { selectLead(lead.lead_id); setView("prioritize"); }}>
+                    <div className="lead-card-top">
+                      <span className="lead-id">{lead.lead_id}</span>
+                      <span className={`fit-tag ${(lead.declared_fit || "unknown").toLowerCase()}`}>{lead.declared_fit || "Fit unknown"}</span>
                     </div>
-                    <div className="context-item">
-                      <span>Execution timestamp (UTC)</span>
-                      <strong>{auditRecord.execution_timestamp}</strong>
-                    </div>
-                    <div className="context-item">
-                      <span>Final recommendation</span>
-                      <strong>{auditRecord.final_recommendation}</strong>
-                    </div>
-                    <div className="context-item">
-                      <span>Recorded agent sequence</span>
-                      <strong>{auditRecord.agent_execution_sequence.length} agents</strong>
-                    </div>
-                  </div>
-
-                  <h4>Recorded execution sequence</h4>
-                  <ol className="audit-sequence">
-                    {auditRecord.agent_execution_sequence.map((name, index) => (
-                      <li key={`${name}-${index}`}>{name}</li>
-                    ))}
-                  </ol>
-
-                  <h4>Stored audit data</h4>
-                  <pre className="audit-json">
-                    {JSON.stringify(auditRecord, null, 2)}
-                  </pre>
-                </div>
-              )}
-
-              <p className="context-footnote">
-                Audit storage is currently in memory. Records are available while
-                the backend process remains running and are cleared when it restarts.
-              </p>
-            </section>
-
-            {result.errors.length > 0 && (
-              <div className="error-banner">
-                {result.errors.map((item, index) => <p key={index}>{item}</p>)}
+                    <h3>{lead.contact?.name || "Unnamed lead"}</h3>
+                    <p>{lead.stage || "Stage not provided"} · {lead.age_days} days old</p>
+                    <span className="card-action">Review lead <span aria-hidden="true">→</span></span>
+                  </button>
+                ))}
               </div>
             )}
+          </section>
+
+          <section className="how-panel">
+            <div>
+              <p className="eyebrow">A CLEAR BUSINESS PROCESS</p>
+              <h2>From lead information to a practical next step</h2>
+              <p className="section-copy">The application evaluates recorded lead details and returns a consistent recommendation with reasons and supporting evidence.</p>
+            </div>
+            <div className="process-steps">
+              <div><span>01</span><strong>Review input</strong><small>Lead details and engagement</small></div>
+              <div><span>02</span><strong>Prioritize</strong><small>Consistent business rules</small></div>
+              <div><span>03</span><strong>Understand why</strong><small>Reasons and evidence</small></div>
+              <div><span>04</span><strong>Take action</strong><small>Recommended next step</small></div>
+            </div>
+          </section>
+        </>
+      )}
+
+      {view === "prioritize" && (
+        <section className="workspace">
+          <div className="section-heading workspace-heading">
+            <div>
+              <p className="eyebrow">LEAD WORKSPACE</p>
+              <h2>Review and prioritize</h2>
+              <p className="section-copy">Choose a sample lead, check the information, and run the prioritization workflow.</p>
+            </div>
+            <button className="text-button" onClick={() => setView("overview")}>← Back to overview</button>
+          </div>
+
+          <div className="workspace-grid">
+            <aside className="panel lead-panel">
+              <div className="panel-heading">
+                <div><p className="eyebrow">AVAILABLE RECORDS</p><h3>Lead list</h3></div>
+                <span className="count-badge">{leads.length}</span>
+              </div>
+              {loading ? <p className="muted">Loading leads…</p> : leads.length === 0 ? <p className="muted">No lead records available.</p> : (
+                <div className="lead-list">
+                  {leads.map((lead) => (
+                    <button className={`lead-item ${selectedLeadId === lead.lead_id ? "selected" : ""}`} key={lead.lead_id} onClick={() => selectLead(lead.lead_id)}>
+                      <span className="lead-id">{lead.lead_id}</span>
+                      <strong>{lead.contact?.name || "Unnamed lead"}</strong>
+                      <small>{lead.stage || "No stage"} · {lead.age_days} days old</small>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </aside>
+
+            <section className="panel detail-panel">
+              <div className="panel-heading">
+                <div><p className="eyebrow">BUSINESS INPUT</p><h3>Lead information</h3></div>
+                {selectedLead && <span className="record-label">Selected lead</span>}
+              </div>
+              {!selectedLead ? <div className="empty-state">Select a lead from the list to review its information.</div> : (
+                <>
+                  <div className="profile-header">
+                    <div className="avatar">{(selectedLead.contact?.name || "L").charAt(0).toUpperCase()}</div>
+                    <div><h3>{selectedLead.contact?.name || selectedLead.lead_id}</h3><p>{selectedLead.contact?.email || selectedLead.contact?.phone || "Contact details not provided"}</p></div>
+                  </div>
+                  <div className="detail-grid">
+                    <div><span>Lead ID</span><strong>{selectedLead.lead_id}</strong></div>
+                    <div><span>Lead source</span><strong>{displayValue(selectedLead.source)}</strong></div>
+                    <div><span>Sales stage</span><strong>{displayValue(selectedLead.stage)}</strong></div>
+                    <div><span>Lead age</span><strong>{selectedLead.age_days} days</strong></div>
+                    <div><span>Declared fit</span><strong>{displayValue(selectedLead.declared_fit)}</strong></div>
+                    <div><span>Last contact</span><strong>{displayValue(selectedLead.last_contact_date)}</strong></div>
+                    <div className="full-width"><span>Declared need</span><strong>{displayValue(selectedLead.declared_need)}</strong></div>
+                    <div className="full-width"><span>Follow-up commitment</span><strong>{selectedLead.pending_follow_up.committed ? "Committed" : "No committed follow-up"}{selectedLead.pending_follow_up.due_at ? ` · Due ${selectedLead.pending_follow_up.due_at}` : ""}</strong></div>
+                  </div>
+                  <div className="engagement-section">
+                    <div className="subsection-heading"><h4>Recorded engagement</h4><span>{selectedLead.engagement_events.length} events</span></div>
+                    {selectedLead.engagement_events.length === 0 ? <p className="muted">No engagement events recorded.</p> : (
+                      <ul className="event-list">
+                        {selectedLead.engagement_events.map((event, index) => <li key={`${event.event_type}-${index}`}><span className="event-dot" /><div><strong>{event.event_type}</strong><p>{event.description || "No additional description"}</p><small>{event.occurred_at}</small></div></li>)}
+                      </ul>
+                    )}
+                  </div>
+                  <button className="primary-button run-button" onClick={handleRunWorkflow} disabled={running || loading || !health}>
+                    {running ? "Evaluating lead…" : "Run prioritization"} {!running && <span aria-hidden="true">→</span>}
+                  </button>
+                  {!health && <p className="field-note">Connect the backend before running prioritization.</p>}
+                  <p className="field-note">The recommendation is based on the selected record and the existing deterministic workflow.</p>
+                </>
+              )}
+            </section>
+          </div>
+        </section>
+      )}
+
+      <section className="results-section">
+        <div className="section-heading">
+          <div><p className="eyebrow">DECISION RESULT</p><h2>Your prioritization result</h2></div>
+          <span className={`result-state ${result ? "complete" : ""}`}>{running ? "IN PROGRESS" : result ? "COMPLETE" : "AWAITING RUN"}</span>
+        </div>
+
+        {!result && !running && <div className="empty-state result-empty"><span className="empty-symbol">◎</span><h3>Your recommendation will appear here</h3><p>Choose a lead and run prioritization. The result will include a clear next step and the evidence behind it.</p></div>}
+        {running && <div className="empty-state result-empty"><span className="loader" /><h3>Reviewing lead signals</h3><p>The prioritization workflow is evaluating the selected lead.</p></div>}
+
+        {result && recommendation && (
+          <div className="result-content">
+            <article className={`recommendation-card ${recommendationClass(result.recommendation)}`}>
+              <div>
+                <span className="recommendation-label">RECOMMENDATION FOR {result.lead_id}</span>
+                <h3>{recommendation.title}</h3>
+                <p>{recommendation.description}</p>
+              </div>
+              <div className="score-box"><strong>{result.priority_score ?? "—"}</strong><span>Priority score</span></div>
+            </article>
+
+            <div className="result-grid">
+              <section className="panel result-panel">
+                <p className="eyebrow">WHY THIS RESULT</p>
+                <h3>Reasons for the recommendation</h3>
+                {result.reasons.length ? <ul className="evidence-list">{result.reasons.map((reason, i) => <li key={i}>{reason}</li>)}</ul> : <p className="muted">No additional reasons were returned.</p>}
+                <div className="next-action">
+                  <span className="eyebrow">RECOMMENDED NEXT ACTION</span>
+                  <p>{recommendation.action}</p>
+                </div>
+              </section>
+              <section className="panel result-panel">
+                <p className="eyebrow">SUPPORTING INFORMATION</p>
+                <h3>Evidence from this lead</h3>
+                {result.evidence.length ? <ul className="evidence-list">{result.evidence.map((item, i) => <li key={i}>{item}</li>)}</ul> : <p className="muted">No consolidated evidence was returned.</p>}
+                <div className="audit-reference"><span>Audit reference</span><strong>{result.audit_reference}</strong></div>
+              </section>
+            </div>
+
+            <details className="advanced-panel">
+              <summary><span><strong>Advanced details</strong><small>Agent contributions, decision rules and audit trace</small></span><span className="advanced-toggle">View details</span></summary>
+              <div className="advanced-content">
+                <div className="advanced-meta">
+                  <div><span>Workflow ID</span><strong>{result.workflow_id}</strong></div>
+                  <div><span>Lead ID</span><strong>{result.lead_id}</strong></div>
+                  <div><span>Agent results</span><strong>{result.agent_outputs.length}</strong></div>
+                  <div><span>Triggered rules</span><strong>{result.triggered_rules.length}</strong></div>
+                </div>
+                <section className="advanced-subsection">
+                  <h3>Triggered decision rules</h3>
+                  {result.triggered_rules.length ? <div className="rule-list">{result.triggered_rules.map((rule) => <span className="rule-chip" key={rule}>{rule}</span>)}</div> : <p className="muted">No triggered rules were returned.</p>}
+                </section>
+                <section className="advanced-subsection">
+                  <h3>Agent contributions</h3>
+                  <div className="agent-grid">{result.agent_outputs.map(renderAgentCard)}</div>
+                </section>
+                <section className="advanced-subsection audit-section">
+                  <div className="panel-heading"><div><h3>Audit record</h3><p className="muted">Retrieve the record using the reference generated for this workflow run.</p></div><button className="secondary-button" onClick={handleLoadAudit} disabled={auditLoading}>{auditLoading ? "Retrieving…" : "Retrieve audit record"}</button></div>
+                  {auditError && <div className="error-banner" role="alert">{auditError}</div>}
+                  {auditRecord && (
+                    <div className="audit-result">
+                      <p className="success-note">Audit record retrieved.</p>
+                      <div className="advanced-meta">
+                        <div><span>Audit reference</span><strong>{auditRecord.audit_reference}</strong></div>
+                        <div><span>Execution time (UTC)</span><strong>{auditRecord.execution_timestamp}</strong></div>
+                        <div><span>Final recommendation</span><strong>{auditRecord.final_recommendation}</strong></div>
+                        <div><span>Agent sequence</span><strong>{auditRecord.agent_execution_sequence.length} agents</strong></div>
+                      </div>
+                      <details className="raw-details"><summary>View recorded execution sequence and data</summary><ol>{auditRecord.agent_execution_sequence.map((name, i) => <li key={`${name}-${i}`}>{name}</li>)}</ol><pre>{JSON.stringify(auditRecord, null, 2)}</pre></details>
+                    </div>
+                  )}
+                  <p className="field-note">Audit records are currently held in memory and are cleared when the backend restarts.</p>
+                </section>
+              </div>
+            </details>
+            {result.errors.length > 0 && <div className="error-banner">{result.errors.map((item, i) => <p key={i}>{item}</p>)}</div>}
           </div>
         )}
       </section>
 
       <footer className="footer">
         <span>AA007 · Lead Follow-up Prioritization Intelligence</span>
-        <span>Phase 2.2 · LangGraph conditional routing with deterministic decisions</span>
+        <span>Recommendations are evidence-based decision support; customer contact remains a human action.</span>
       </footer>
     </main>
   );
