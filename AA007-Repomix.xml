@@ -75,6 +75,7 @@ backend/
   Dockerfile
   requirements.txt
   test_gemini_workflow.py
+  verify_four_outcomes.py
 docs/
   course-guides/
     02_Controlled_LLM_and_Evaluation_Guide.md
@@ -82,11 +83,14 @@ docs/
   phase2-evidence/
     gemini-workflow-integration.txt
     llm-service-tests.txt
+    openai-429-fallback-note.md
     phase2-3-final-tests.txt
     phase2-3-llm-audit.png
     phase2-3-workflow.png
   phase23-evidence/
     PHASE23_EVALUATION.md
+  phase3-evidence/
+    four-outcome-verification.json
   PHASE1.3_DOCKER_VALIDATION.md
 frontend/
   public/
@@ -123,89 +127,315 @@ README.md
 <files>
 This section contains the contents of the repository's files.
 
-<file path="backend/test_gemini_workflow.py">
-from dotenv import load_dotenv
-load_dotenv("backend/.env", override=True)
+<file path="backend/verify_four_outcomes.py">
+import json
+from datetime import date, timedelta
 
-from app.models.schemas import LeadRecord, LeadStage, EngagementEvent
-from app.services.lead_workflow_graph import LeadWorkflowGraph
-from app.services.audit_service import audit_service
-
-lead = LeadRecord(
-    lead_id="GEMINI-INTEGRATION-001",
-    source="Website",
-    age_days=5,
-    engagement_events=[
-        EngagementEvent(
-            event_type="DEMO_REQUEST",
-            occurred_at="2026-11-22"
-        )
-    ],
-    sales_notes="Customer requested a product demo, asked about pricing, and plans to decide next month.",
-    declared_fit="HIGH",
-    stage=LeadStage.QUALIFIED
+from app.main import workflow_service
+from app.models.schemas import (
+    ContactDetails,
+    EngagementEvent,
+    LeadRecord,
+    LeadStage,
+    PendingFollowUp,
+    WorkflowRequest,
 )
 
-result = LeadWorkflowGraph().run(lead)
-response = result["response"].model_dump(mode="json")
-audit = audit_service.get_audit_record(response["audit_reference"])
-metadata = response["llm_metadata"]
+today = date.today()
 
-print("\n========== WORKFLOW RESULT ==========")
-print("Recommendation:", response["recommendation"])
-print("Priority score:", response["priority_score"])
-print("Summary:", response["llm_summary"])
-print("Intent tags:", response["llm_intent_tags"])
-print("LLM metadata:", metadata)
-print("Graph trace:", result["graph_trace"])
+scenarios = [
+    {
+        "name": "REQUEST_DATA",
+        "expected": "REQUEST_DATA",
+        "lead": LeadRecord(
+            lead_id="PHASE31-REQUEST-DATA",
+            contact=None,
+            source="Website",
+            age_days=2,
+            last_contact_date=today,
+            declared_fit="HIGH",
+            stage=LeadStage.NEW,
+        ),
+    },
+    {
+        "name": "FOLLOW_UP_NOW",
+        "expected": "FOLLOW_UP_NOW",
+        "lead": LeadRecord(
+            lead_id="PHASE31-FOLLOW-UP-NOW",
+            contact=ContactDetails(name="Demo High Fit"),
+            source="Website",
+            age_days=1,
+            last_contact_date=today,
+            engagement_events=[
+                EngagementEvent(
+                    event_type="INQUIRY",
+                    occurred_at=today,
+                    description="Recent product inquiry",
+                )
+            ],
+            declared_fit="HIGH",
+            stage=LeadStage.NEW,
+            pending_follow_up=PendingFollowUp(committed=False),
+        ),
+    },
+    {
+        "name": "NURTURE",
+        "expected": "NURTURE",
+        "lead": LeadRecord(
+            lead_id="PHASE31-NURTURE",
+            contact=ContactDetails(name="Demo Stale Lead"),
+            source="Event",
+            age_days=30,
+            last_contact_date=today - timedelta(days=20),
+            engagement_events=[],
+            declared_fit="LOW",
+            stage=LeadStage.NEW,
+            pending_follow_up=PendingFollowUp(committed=False),
+        ),
+    },
+    {
+        "name": "FOLLOW_UP_SOON",
+        "expected": "FOLLOW_UP_SOON",
+        "lead": LeadRecord(
+            lead_id="PHASE31-FOLLOW-UP-SOON",
+            contact=ContactDetails(name="Demo Moderate Lead"),
+            source="Referral",
+            age_days=8,
+            last_contact_date=today - timedelta(days=7),
+            engagement_events=[
+                EngagementEvent(
+                    event_type="EMAIL_REPLY",
+                    occurred_at=today - timedelta(days=7),
+                    description="One recorded email reply",
+                )
+            ],
+            declared_fit="MEDIUM",
+            stage=LeadStage.CONTACTED,
+            pending_follow_up=PendingFollowUp(committed=False),
+        ),
+    },
+]
 
-print("\n========== AUDIT ==========")
-print("Audit found:", audit is not None)
-if audit:
-    print("Audit recommendation:", audit["final_recommendation"])
-    print("Audit LLM metadata:", audit["llm_metadata"])
+results = []
+failures = 0
 
-checks = {
-    "Gemini provider": metadata.get("provider") == "gemini",
-    "Real LLM execution": metadata.get("llm_used") == "True",
-    "Success status": metadata.get("status") == "success",
-    "Validation passed": metadata.get("validation_status") == "passed",
-    "No fallback": metadata.get("fallback_used") == "False",
-    "Audit stored": audit is not None,
-    "Recommendation preserved": audit is not None and audit["final_recommendation"] == response["recommendation"],
+for scenario in scenarios:
+    response = workflow_service.run(
+        WorkflowRequest(lead=scenario["lead"])
+    )
+
+    actual = response.recommendation
+    passed = actual == scenario["expected"]
+
+    if not passed:
+        failures += 1
+
+    item = {
+        "scenario": scenario["name"],
+        "expected": scenario["expected"],
+        "actual": actual,
+        "passed": passed,
+        "lead_id": response.lead_id,
+        "triggered_rules": response.triggered_rules,
+        "reasons": response.reasons,
+        "evidence": response.evidence,
+        "audit_reference": response.audit_reference,
+        "llm_metadata": response.llm_metadata,
+    }
+    results.append(item)
+
+    print(
+        f"{'PASS' if passed else 'FAIL'} | "
+        f"{scenario['name']} | "
+        f"expected={scenario['expected']} | actual={actual}"
+    )
+    print(f"  Rules: {response.triggered_rules}")
+    print(f"  Audit: {response.audit_reference}")
+
+output = {
+    "phase": "3.1",
+    "test": "four_deterministic_recommendation_outcomes",
+    "total": len(results),
+    "passed": len(results) - failures,
+    "failed": failures,
+    "results": results,
 }
 
-print("\n========== ACCEPTANCE CHECKS ==========")
-for name, passed in checks.items():
-    print(("PASS" if passed else "FAIL") + ": " + name)
+with open(
+    "../docs/phase3-evidence/four-outcome-verification.json",
+    "w",
+    encoding="utf-8",
+) as file:
+    json.dump(output, file, indent=2, ensure_ascii=False)
 
-print("\nRESULT:", "ALL CHECKS PASSED" if all(checks.values()) else "CHECKS NEED REVIEW")
+print(f"\nRESULT: {len(results) - failures}/{len(results)} passed")
+
+if failures:
+    raise SystemExit(1)
+
+print("Evidence saved: docs/phase3-evidence/four-outcome-verification.json")
 </file>
 
-<file path="docs/phase2-evidence/gemini-workflow-integration.txt">
-========== WORKFLOW RESULT ==========
-Recommendation: REQUEST_DATA
-Priority score: None
-Summary: Customer requested a product demo, inquired about pricing, and stated plans to make a decision next month.
-Intent tags: ['DEMO_INTEREST', 'FUTURE_DECISION', 'PRICING_INTEREST']
-LLM metadata: {'llm_used': 'True', 'provider': 'gemini', 'model': 'gemini-3.5-flash-lite', 'status': 'success', 'fallback_used': 'False', 'validation_status': 'passed'}
-Graph trace: [{'node': 'initialize_context', 'status': 'started'}, {'node': 'initialize_context', 'status': 'completed'}, {'node': 'lead_intake', 'status': 'started'}, {'node': 'lead_intake', 'status': 'completed'}, {'node': 'recency', 'status': 'started'}, {'node': 'recency', 'status': 'completed'}, {'node': 'engagement', 'status': 'started'}, {'node': 'engagement', 'status': 'completed'}, {'node': 'fit_sla', 'status': 'started'}, {'node': 'fit_sla', 'status': 'completed'}, {'node': 'decision', 'status': 'started'}, {'node': 'decision', 'status': 'completed'}, {'node': 'llm_enhancement', 'status': 'started'}, {'node': 'llm_enhancement', 'status': 'completed'}, {'node': 'route_request_data', 'status': 'started'}, {'node': 'route_request_data', 'status': 'completed'}, {'node': 'finalize', 'status': 'started'}, {'node': 'finalize', 'status': 'completed'}]
-
-========== AUDIT ==========
-Audit found: True
-Audit recommendation: REQUEST_DATA
-Audit LLM metadata: {'llm_used': 'True', 'provider': 'gemini', 'model': 'gemini-3.5-flash-lite', 'status': 'success', 'fallback_used': 'False', 'validation_status': 'passed'}
-
-========== ACCEPTANCE CHECKS ==========
-PASS: Gemini provider
-PASS: Real LLM execution
-PASS: Success status
-PASS: Validation passed
-PASS: No fallback
-PASS: Audit stored
-PASS: Recommendation preserved
-
-RESULT: ALL CHECKS PASSED
+<file path="docs/phase3-evidence/four-outcome-verification.json">
+{
+  "phase": "3.1",
+  "test": "four_deterministic_recommendation_outcomes",
+  "total": 4,
+  "passed": 4,
+  "failed": 0,
+  "results": [
+    {
+      "scenario": "REQUEST_DATA",
+      "expected": "REQUEST_DATA",
+      "actual": "REQUEST_DATA",
+      "passed": true,
+      "lead_id": "PHASE31-REQUEST-DATA",
+      "triggered_rules": [
+        "AA007-RULE-01"
+      ],
+      "reasons": [
+        "Contact details are missing."
+      ],
+      "evidence": [
+        "Contact details are missing.",
+        "Lead age: 2 days.",
+        "Days since last contact: 0.",
+        "Recorded engagement events: 0.",
+        "Declared fit: HIGH.",
+        "Follow-up committed: False.",
+        "No follow-up due date is available.",
+        "Recommendation: REQUEST_DATA",
+        "Contact details are missing.",
+        "Rules triggered: AA007-RULE-01"
+      ],
+      "audit_reference": "AUDIT-AA007-04C80C9BD8CE",
+      "llm_metadata": {
+        "llm_used": "False",
+        "provider": "gemini",
+        "model": "gemini-3.5-flash-lite",
+        "status": "fallback",
+        "fallback_used": "True",
+        "validation_status": "not_applicable"
+      }
+    },
+    {
+      "scenario": "FOLLOW_UP_NOW",
+      "expected": "FOLLOW_UP_NOW",
+      "actual": "FOLLOW_UP_NOW",
+      "passed": true,
+      "lead_id": "PHASE31-FOLLOW-UP-NOW",
+      "triggered_rules": [
+        "AA007-RULE-03"
+      ],
+      "reasons": [
+        "Declared fit is HIGH.",
+        "Lead contact is recent.",
+        "Engagement activity is recorded."
+      ],
+      "evidence": [
+        "Lead ID: PHASE31-FOLLOW-UP-NOW",
+        "Lead stage: NEW",
+        "Lead source: Website",
+        "Lead age: 1 days.",
+        "Days since last contact: 0.",
+        "Recorded engagement events: 1.",
+        "Engagement event: INQUIRY",
+        "Declared fit: HIGH.",
+        "Follow-up committed: False.",
+        "No follow-up due date is available.",
+        "Recommendation: FOLLOW_UP_NOW",
+        "Declared fit is HIGH.",
+        "Lead contact is recent.",
+        "Engagement activity is recorded.",
+        "Rules triggered: AA007-RULE-03"
+      ],
+      "audit_reference": "AUDIT-AA007-5E9ADA6A85F4",
+      "llm_metadata": {
+        "llm_used": "False",
+        "provider": "gemini",
+        "model": "gemini-3.5-flash-lite",
+        "status": "fallback",
+        "fallback_used": "True",
+        "validation_status": "not_applicable"
+      }
+    },
+    {
+      "scenario": "NURTURE",
+      "expected": "NURTURE",
+      "actual": "NURTURE",
+      "passed": true,
+      "lead_id": "PHASE31-NURTURE",
+      "triggered_rules": [
+        "AA007-RULE-04"
+      ],
+      "reasons": [
+        "Lead contact is stale.",
+        "No engagement events are recorded."
+      ],
+      "evidence": [
+        "Lead ID: PHASE31-NURTURE",
+        "Lead stage: NEW",
+        "Lead source: Event",
+        "Lead age: 30 days.",
+        "Days since last contact: 20.",
+        "Recorded engagement events: 0.",
+        "Declared fit: LOW.",
+        "Follow-up committed: False.",
+        "No follow-up due date is available.",
+        "Recommendation: NURTURE",
+        "Lead contact is stale.",
+        "No engagement events are recorded.",
+        "Rules triggered: AA007-RULE-04"
+      ],
+      "audit_reference": "AUDIT-AA007-1AFB663AB970",
+      "llm_metadata": {
+        "llm_used": "False",
+        "provider": "gemini",
+        "model": "gemini-3.5-flash-lite",
+        "status": "fallback",
+        "fallback_used": "True",
+        "validation_status": "not_applicable"
+      }
+    },
+    {
+      "scenario": "FOLLOW_UP_SOON",
+      "expected": "FOLLOW_UP_SOON",
+      "actual": "FOLLOW_UP_SOON",
+      "passed": true,
+      "lead_id": "PHASE31-FOLLOW-UP-SOON",
+      "triggered_rules": [
+        "AA007-RULE-05"
+      ],
+      "reasons": [
+        "No immediate-follow-up or nurture rule was triggered."
+      ],
+      "evidence": [
+        "Lead ID: PHASE31-FOLLOW-UP-SOON",
+        "Lead stage: CONTACTED",
+        "Lead source: Referral",
+        "Lead age: 8 days.",
+        "Days since last contact: 7.",
+        "Recorded engagement events: 1.",
+        "Engagement event: EMAIL_REPLY",
+        "Declared fit: MEDIUM.",
+        "Follow-up committed: False.",
+        "No follow-up due date is available.",
+        "Recommendation: FOLLOW_UP_SOON",
+        "No immediate-follow-up or nurture rule was triggered.",
+        "Rules triggered: AA007-RULE-05"
+      ],
+      "audit_reference": "AUDIT-AA007-A48358231169",
+      "llm_metadata": {
+        "llm_used": "False",
+        "provider": "gemini",
+        "model": "gemini-3.5-flash-lite",
+        "status": "fallback",
+        "fallback_used": "True",
+        "validation_status": "not_applicable"
+      }
+    }
+  ]
+}
 </file>
 
 <file path="backend/app/agents/__init__.py">
@@ -694,205 +924,6 @@ class ContextBuilder:
         return build_workflow_context(lead)
 </file>
 
-<file path="backend/app/services/llm_service.py">
-import json
-import os
-from typing import Any
-
-import httpx
-
-
-class LLMService:
-    """Optional sales-note summarization adapter with provider support."""
-
-    ALLOWED_TAGS = {
-        "DEMO_INTEREST",
-        "PRICING_INTEREST",
-        "FUTURE_DECISION",
-        "PRODUCT_INTEREST",
-        "UNCLEAR",
-    }
-
-    MAX_NOTES_LENGTH = 4000
-    MAX_SUMMARY_LENGTH = 500
-
-    def __init__(self):
-        self.provider = os.getenv("LLM_PROVIDER", "openai").strip().lower()
-        self.model = os.getenv("LLM_MODEL", "").strip()
-        self.api_key = os.getenv("LLM_API_KEY", "").strip()
-        self.timeout = float(os.getenv("LLM_TIMEOUT", "10"))
-
-    def fallback(self, notes: str) -> dict[str, Any]:
-        text = notes.lower()
-        tags = []
-
-        if "demo" in text:
-            tags.append("DEMO_INTEREST")
-        if any(word in text for word in ("price", "pricing", "cost")):
-            tags.append("PRICING_INTEREST")
-        if any(word in text for word in ("later", "next month", "next quarter")):
-            tags.append("FUTURE_DECISION")
-        if any(word in text for word in ("product", "feature")):
-            tags.append("PRODUCT_INTEREST")
-
-        if not tags:
-            tags.append("UNCLEAR")
-
-        return {
-            "summary": "Sales-note summary generated using deterministic fallback.",
-            "intent_tags": tags,
-            "llm_used": False,
-            "provider": self.provider,
-            "model": self.model or "not_configured",
-            "status": "fallback",
-            "fallback_used": True,
-            "validation_status": "not_applicable",
-        }
-
-    def build_prompt(self, notes: str) -> list[dict[str, str]]:
-        return [
-            {
-                "role": "system",
-                "content": (
-                    "Summarize the supplied sales notes. Extract only "
-                    "non-sensitive intent. Do not infer facts or invent "
-                    "details. Return JSON only with exactly two fields: "
-                    "summary (string, maximum 500 characters) and "
-                    "intent_tags (array of allowed strings). "
-                    f"Allowed tags: {', '.join(sorted(self.ALLOWED_TAGS))}. "
-                    "Use UNCLEAR when no supported intent is present."
-                ),
-            },
-            {"role": "user", "content": notes},
-        ]
-
-    def validate_output(self, data: Any) -> dict[str, Any]:
-        if not isinstance(data, dict):
-            raise ValueError("LLM response must be a JSON object.")
-
-        if set(data) != {"summary", "intent_tags"}:
-            raise ValueError("Unexpected LLM response fields.")
-
-        summary = data["summary"]
-        tags = data["intent_tags"]
-
-        if not isinstance(summary, str) or not summary.strip():
-            raise ValueError("Summary must be a non-empty string.")
-
-        if len(summary) > self.MAX_SUMMARY_LENGTH:
-            raise ValueError("Summary exceeds the permitted length.")
-
-        if (
-            not isinstance(tags, list)
-            or not tags
-            or len(tags) > len(self.ALLOWED_TAGS)
-            or any(
-                not isinstance(tag, str) or tag not in self.ALLOWED_TAGS
-                for tag in tags
-            )
-        ):
-            raise ValueError("Invalid intent tags.")
-
-        return {
-            "summary": summary.strip(),
-            "intent_tags": sorted(set(tags)),
-        }
-
-    def _call_openai(self, notes: str) -> Any:
-        with httpx.Client(timeout=self.timeout) as client:
-            response = client.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": self.model,
-                    "messages": self.build_prompt(notes),
-                    "response_format": {"type": "json_object"},
-                    "temperature": 0,
-                },
-            )
-            response.raise_for_status()
-
-        content = response.json()["choices"][0]["message"]["content"]
-        return json.loads(content)
-
-    def _call_gemini(self, notes: str) -> Any:
-        prompt = self.build_prompt(notes)
-
-        system_instruction = prompt[0]["content"]
-        user_content = prompt[1]["content"]
-
-        url = (
-            "https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{self.model}:generateContent"
-        )
-
-        with httpx.Client(timeout=self.timeout) as client:
-            response = client.post(
-                url,
-                headers={
-                    "x-goog-api-key": self.api_key,
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "systemInstruction": {
-                        "parts": [{"text": system_instruction}]
-                    },
-                    "contents": [
-                        {
-                            "role": "user",
-                            "parts": [{"text": user_content}],
-                        }
-                    ],
-                    "generationConfig": {
-                        "temperature": 0,
-                        "responseMimeType": "application/json",
-                    },
-                },
-            )
-            response.raise_for_status()
-
-        content = response.json()["candidates"][0]["content"]["parts"][0]["text"]
-        return json.loads(content)
-
-    def invoke(self, notes: str) -> dict[str, Any]:
-        if not notes or not notes.strip():
-            return self.fallback("")
-
-        notes = notes.strip()[:self.MAX_NOTES_LENGTH]
-
-        if not self.api_key or not self.model:
-            return self.fallback(notes)
-
-        try:
-            if self.provider == "openai":
-                raw_output = self._call_openai(notes)
-            elif self.provider == "gemini":
-                raw_output = self._call_gemini(notes)
-            else:
-                return self.fallback(notes)
-
-            validated = self.validate_output(raw_output)
-
-            return {
-                **validated,
-                "llm_used": True,
-                "provider": self.provider,
-                "model": self.model,
-                "status": "success",
-                "fallback_used": False,
-                "validation_status": "passed",
-            }
-
-        except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError):
-            return self.fallback(notes)
-
-
-llm_service = LLMService()
-</file>
-
 <file path="backend/app/services/workflow_context.py">
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -963,6 +994,65 @@ LLM_PROVIDER=openai
 LLM_MODEL=
 LLM_API_KEY=
 LLM_TIMEOUT=10
+</file>
+
+<file path="backend/test_gemini_workflow.py">
+from dotenv import load_dotenv
+load_dotenv("backend/.env", override=True)
+
+from app.models.schemas import LeadRecord, LeadStage, EngagementEvent
+from app.services.lead_workflow_graph import LeadWorkflowGraph
+from app.services.audit_service import audit_service
+
+lead = LeadRecord(
+    lead_id="GEMINI-INTEGRATION-001",
+    source="Website",
+    age_days=5,
+    engagement_events=[
+        EngagementEvent(
+            event_type="DEMO_REQUEST",
+            occurred_at="2026-11-22"
+        )
+    ],
+    sales_notes="Customer requested a product demo, asked about pricing, and plans to decide next month.",
+    declared_fit="HIGH",
+    stage=LeadStage.QUALIFIED
+)
+
+result = LeadWorkflowGraph().run(lead)
+response = result["response"].model_dump(mode="json")
+audit = audit_service.get_audit_record(response["audit_reference"])
+metadata = response["llm_metadata"]
+
+print("\n========== WORKFLOW RESULT ==========")
+print("Recommendation:", response["recommendation"])
+print("Priority score:", response["priority_score"])
+print("Summary:", response["llm_summary"])
+print("Intent tags:", response["llm_intent_tags"])
+print("LLM metadata:", metadata)
+print("Graph trace:", result["graph_trace"])
+
+print("\n========== AUDIT ==========")
+print("Audit found:", audit is not None)
+if audit:
+    print("Audit recommendation:", audit["final_recommendation"])
+    print("Audit LLM metadata:", audit["llm_metadata"])
+
+checks = {
+    "Gemini provider": metadata.get("provider") == "gemini",
+    "Real LLM execution": metadata.get("llm_used") == "True",
+    "Success status": metadata.get("status") == "success",
+    "Validation passed": metadata.get("validation_status") == "passed",
+    "No fallback": metadata.get("fallback_used") == "False",
+    "Audit stored": audit is not None,
+    "Recommendation preserved": audit is not None and audit["final_recommendation"] == response["recommendation"],
+}
+
+print("\n========== ACCEPTANCE CHECKS ==========")
+for name, passed in checks.items():
+    print(("PASS" if passed else "FAIL") + ": " + name)
+
+print("\nRESULT:", "ALL CHECKS PASSED" if all(checks.values()) else "CHECKS NEED REVIEW")
 </file>
 
 <file path="docs/course-guides/02_Controlled_LLM_and_Evaluation_Guide.md">
@@ -1508,6 +1598,32 @@ When this Product Bible is given to an AI assistant together with a RealRails Gi
 4. Use the latest **Repomix** as the implementation truth.
 5. Use **ABIP only as an architecture-learning reference**.
 6. Do not invent unrelated features, agents, data, or future-phase technologies.
+</file>
+
+<file path="docs/phase2-evidence/gemini-workflow-integration.txt">
+========== WORKFLOW RESULT ==========
+Recommendation: REQUEST_DATA
+Priority score: None
+Summary: Customer requested a product demo, inquired about pricing, and stated plans to make a decision next month.
+Intent tags: ['DEMO_INTEREST', 'FUTURE_DECISION', 'PRICING_INTEREST']
+LLM metadata: {'llm_used': 'True', 'provider': 'gemini', 'model': 'gemini-3.5-flash-lite', 'status': 'success', 'fallback_used': 'False', 'validation_status': 'passed'}
+Graph trace: [{'node': 'initialize_context', 'status': 'started'}, {'node': 'initialize_context', 'status': 'completed'}, {'node': 'lead_intake', 'status': 'started'}, {'node': 'lead_intake', 'status': 'completed'}, {'node': 'recency', 'status': 'started'}, {'node': 'recency', 'status': 'completed'}, {'node': 'engagement', 'status': 'started'}, {'node': 'engagement', 'status': 'completed'}, {'node': 'fit_sla', 'status': 'started'}, {'node': 'fit_sla', 'status': 'completed'}, {'node': 'decision', 'status': 'started'}, {'node': 'decision', 'status': 'completed'}, {'node': 'llm_enhancement', 'status': 'started'}, {'node': 'llm_enhancement', 'status': 'completed'}, {'node': 'route_request_data', 'status': 'started'}, {'node': 'route_request_data', 'status': 'completed'}, {'node': 'finalize', 'status': 'started'}, {'node': 'finalize', 'status': 'completed'}]
+
+========== AUDIT ==========
+Audit found: True
+Audit recommendation: REQUEST_DATA
+Audit LLM metadata: {'llm_used': 'True', 'provider': 'gemini', 'model': 'gemini-3.5-flash-lite', 'status': 'success', 'fallback_used': 'False', 'validation_status': 'passed'}
+
+========== ACCEPTANCE CHECKS ==========
+PASS: Gemini provider
+PASS: Real LLM execution
+PASS: Success status
+PASS: Validation passed
+PASS: No fallback
+PASS: Audit stored
+PASS: Recommendation preserved
+
+RESULT: ALL CHECKS PASSED
 </file>
 
 <file path="docs/phase2-evidence/phase2-3-final-tests.txt">
@@ -2176,6 +2292,205 @@ class WorkflowResponse(BaseModel):
     llm_metadata: dict[str, str] = Field(default_factory=dict)
 </file>
 
+<file path="backend/app/services/llm_service.py">
+import json
+import os
+from typing import Any
+
+import httpx
+
+
+class LLMService:
+    """Optional sales-note summarization adapter with provider support."""
+
+    ALLOWED_TAGS = {
+        "DEMO_INTEREST",
+        "PRICING_INTEREST",
+        "FUTURE_DECISION",
+        "PRODUCT_INTEREST",
+        "UNCLEAR",
+    }
+
+    MAX_NOTES_LENGTH = 4000
+    MAX_SUMMARY_LENGTH = 500
+
+    def __init__(self):
+        self.provider = os.getenv("LLM_PROVIDER", "openai").strip().lower()
+        self.model = os.getenv("LLM_MODEL", "").strip()
+        self.api_key = os.getenv("LLM_API_KEY", "").strip()
+        self.timeout = float(os.getenv("LLM_TIMEOUT", "10"))
+
+    def fallback(self, notes: str) -> dict[str, Any]:
+        text = notes.lower()
+        tags = []
+
+        if "demo" in text:
+            tags.append("DEMO_INTEREST")
+        if any(word in text for word in ("price", "pricing", "cost")):
+            tags.append("PRICING_INTEREST")
+        if any(word in text for word in ("later", "next month", "next quarter")):
+            tags.append("FUTURE_DECISION")
+        if any(word in text for word in ("product", "feature")):
+            tags.append("PRODUCT_INTEREST")
+
+        if not tags:
+            tags.append("UNCLEAR")
+
+        return {
+            "summary": "Sales-note summary generated using deterministic fallback.",
+            "intent_tags": tags,
+            "llm_used": False,
+            "provider": self.provider,
+            "model": self.model or "not_configured",
+            "status": "fallback",
+            "fallback_used": True,
+            "validation_status": "not_applicable",
+        }
+
+    def build_prompt(self, notes: str) -> list[dict[str, str]]:
+        return [
+            {
+                "role": "system",
+                "content": (
+                    "Summarize the supplied sales notes. Extract only "
+                    "non-sensitive intent. Do not infer facts or invent "
+                    "details. Return JSON only with exactly two fields: "
+                    "summary (string, maximum 500 characters) and "
+                    "intent_tags (array of allowed strings). "
+                    f"Allowed tags: {', '.join(sorted(self.ALLOWED_TAGS))}. "
+                    "Use UNCLEAR when no supported intent is present."
+                ),
+            },
+            {"role": "user", "content": notes},
+        ]
+
+    def validate_output(self, data: Any) -> dict[str, Any]:
+        if not isinstance(data, dict):
+            raise ValueError("LLM response must be a JSON object.")
+
+        if set(data) != {"summary", "intent_tags"}:
+            raise ValueError("Unexpected LLM response fields.")
+
+        summary = data["summary"]
+        tags = data["intent_tags"]
+
+        if not isinstance(summary, str) or not summary.strip():
+            raise ValueError("Summary must be a non-empty string.")
+
+        if len(summary) > self.MAX_SUMMARY_LENGTH:
+            raise ValueError("Summary exceeds the permitted length.")
+
+        if (
+            not isinstance(tags, list)
+            or not tags
+            or len(tags) > len(self.ALLOWED_TAGS)
+            or any(
+                not isinstance(tag, str) or tag not in self.ALLOWED_TAGS
+                for tag in tags
+            )
+        ):
+            raise ValueError("Invalid intent tags.")
+
+        return {
+            "summary": summary.strip(),
+            "intent_tags": sorted(set(tags)),
+        }
+
+    def _call_openai(self, notes: str) -> Any:
+        with httpx.Client(timeout=self.timeout) as client:
+            response = client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": self.model,
+                    "messages": self.build_prompt(notes),
+                    "response_format": {"type": "json_object"},
+                    "temperature": 0,
+                },
+            )
+            response.raise_for_status()
+
+        content = response.json()["choices"][0]["message"]["content"]
+        return json.loads(content)
+
+    def _call_gemini(self, notes: str) -> Any:
+        prompt = self.build_prompt(notes)
+
+        system_instruction = prompt[0]["content"]
+        user_content = prompt[1]["content"]
+
+        url = (
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{self.model}:generateContent"
+        )
+
+        with httpx.Client(timeout=self.timeout) as client:
+            response = client.post(
+                url,
+                headers={
+                    "x-goog-api-key": self.api_key,
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "systemInstruction": {
+                        "parts": [{"text": system_instruction}]
+                    },
+                    "contents": [
+                        {
+                            "role": "user",
+                            "parts": [{"text": user_content}],
+                        }
+                    ],
+                    "generationConfig": {
+                        "temperature": 0,
+                        "responseMimeType": "application/json",
+                    },
+                },
+            )
+            response.raise_for_status()
+
+        content = response.json()["candidates"][0]["content"]["parts"][0]["text"]
+        return json.loads(content)
+
+    def invoke(self, notes: str) -> dict[str, Any]:
+        if not notes or not notes.strip():
+            return self.fallback("")
+
+        notes = notes.strip()[:self.MAX_NOTES_LENGTH]
+
+        if not self.api_key or not self.model:
+            return self.fallback(notes)
+
+        try:
+            if self.provider == "openai":
+                raw_output = self._call_openai(notes)
+            elif self.provider == "gemini":
+                raw_output = self._call_gemini(notes)
+            else:
+                return self.fallback(notes)
+
+            validated = self.validate_output(raw_output)
+
+            return {
+                **validated,
+                "llm_used": True,
+                "provider": self.provider,
+                "model": self.model,
+                "status": "success",
+                "fallback_used": False,
+                "validation_status": "passed",
+            }
+
+        except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError):
+            return self.fallback(notes)
+
+
+llm_service = LLMService()
+</file>
+
 <file path="backend/tests/test_llm_service.py">
 import json
 from unittest.mock import patch
@@ -2444,6 +2759,72 @@ tests/test_llm_service.py::test_provider_timeout_uses_deterministic_fallback PAS
 tests/test_llm_service.py::test_provider_http_error_uses_deterministic_fallback PASSED [100%]
 
 ============================= 10 passed in 0.13s ==============================
+</file>
+
+<file path="docs/phase2-evidence/openai-429-fallback-note.md">
+# OpenAI HTTP 429 Failure and Deterministic Fallback
+
+**Project:** AA007 - Lead Follow-up Prioritization Intelligence
+**Phase:** 2.3 - Controlled LLM Enhancement
+**Record type:** Retrospective incident note
+**Documentation date:** 2026-11-22
+
+## 1. Observed provider failure
+
+During development and testing, the configured OpenAI provider returned:
+
+- HTTP status: 429
+- Error type: insufficient_quota
+- Reported reason: API credit balance exhausted
+
+The original failure was observed during the project work. The raw provider response was not retained as a separate committed terminal log; this document is a retrospective record, not a reproduction of that log.
+
+## 2. Deterministic fallback behavior
+
+The application retained its deterministic fallback path when the provider could not complete the LLM request.
+
+The existing backend tests verify fallback behavior for:
+- Provider HTTP errors
+- Provider timeouts
+- Malformed provider responses
+
+The tests verify that fallback is used, LLM usage is false, fallback status is reported, and supported deterministic intent tags can still be returned.
+
+These tests establish generic provider-failure handling; they are not a replay of the original OpenAI 429 response.
+
+## 3. Alternative provider integration
+
+Following the OpenAI quota limitation, Gemini was integrated through the existing LLMService provider adapter.
+
+The successful Gemini workflow evidence is recorded separately in:
+
+- gemini-workflow-integration.txt
+- llm-service-tests.txt
+- phase2-3-final-tests.txt
+
+The successful integration recorded:
+- Provider: gemini
+- Model: gemini-3.5-flash-lite
+- LLM used: true
+- Status: success
+- Validation: passed
+- Fallback used: false
+
+The deterministic recommendation and LangGraph workflow routing remained authoritative.
+
+## 4. Architecture boundary
+
+The LLM is restricted to sales-note summarization and approved intent-tag extraction.
+
+It does not calculate lead priority, change deterministic recommendations, override business rules, or control LangGraph routing.
+
+Provider failures continue to use the deterministic fallback.
+
+## 5. Evidence distinction
+
+This note documents the observed OpenAI quota limitation and the subsequent engineering response. It does not claim to be the original API response capture.
+
+The original provider-failure behavior and the later successful Gemini execution are supported by their respective implementation and test evidence.
 </file>
 
 <file path=".gitignore">
@@ -2992,1242 +3373,218 @@ export async function getAuditRecord(
 </file>
 
 <file path="frontend/src/App.css">
-.app-shell {
-  max-width: 1500px;
-  margin: 0 auto;
-  padding: 0 42px 28px;
-}
-
-.topbar {
-  min-height: 82px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid #e7ebf2;
-  gap: 20px;
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 13px;
-}
-
-.brand-mark {
-  width: 43px;
-  height: 43px;
-  display: grid;
-  place-items: center;
-  border-radius: 12px;
-  background: #173b72;
-  color: white;
-  font-weight: 800;
-  letter-spacing: -1px;
-}
-
-.brand-name {
-  font-weight: 750;
-  font-size: 16px;
-  color: #172b4d;
-}
-
-.brand-subtitle {
-  color: #7b8799;
-  font-size: 12px;
-  margin-top: 4px;
-}
-
-.connection {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  color: #64748b;
-  font-size: 13px;
-}
-
-.status-dot,
-.system-label-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: #dc6470;
-}
-
-.status-dot.online,
-.system-label-dot {
-  background: #19a879;
-}
-
-.page-heading {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 38px 0 27px;
-}
-
-.eyebrow {
-  color: #5476a7;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 1.5px;
-  margin: 0 0 9px;
-}
-
-.page-heading h1 {
-  color: #142b4d;
-  font-size: clamp(25px, 3vw, 34px);
-  letter-spacing: -1px;
-  margin: 0;
-}
-
-.page-description {
-  color: #718096;
-  max-width: 680px;
-  line-height: 1.7;
-  font-size: 14px;
-  margin: 10px 0 0;
-}
-
-.system-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: #eaf7f1;
-  color: #187b59;
-  border: 1px solid #d1eee1;
-  border-radius: 30px;
-  padding: 9px 13px;
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.system-label-dot {
-  width: 7px;
-  height: 7px;
-}
-
-.metrics-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 15px;
-  margin-bottom: 22px;
-}
-
-.metric-card,
-.panel,
-.result-panel,
-.agents-panel,
-.evidence-panel {
-  background: white;
-  border: 1px solid #e5eaf1;
-  border-radius: 13px;
-}
-
-.metric-card {
-  padding: 19px 20px;
-  min-height: 112px;
-}
-
-.metric-label {
-  display: block;
-  color: #8290a3;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 1px;
-}
-
-.metric-card strong {
-  display: block;
-  font-size: 27px;
-  color: #17345e;
-  margin-top: 10px;
-}
-
-.metric-card .metric-note {
-  display: block;
-  font-size: 11px;
-  color: #8995a6;
-  margin-top: 3px;
-}
-
-.metric-card .metric-status {
-  color: #16845e;
-  font-size: 22px;
-}
-
-.workspace-grid {
-  display: grid;
-  grid-template-columns: minmax(260px, 0.85fr) minmax(0, 2fr);
-  gap: 18px;
-  align-items: start;
-}
-
-.panel {
-  padding: 23px;
-  min-width: 0;
-}
-
-.panel-heading,
-.results-heading,
-.section-title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.panel-heading h2,
-.results-heading h2 {
-  margin: 0;
-  color: #172e50;
-  font-size: 19px;
-}
-
-.count-badge {
-  display: inline-grid;
-  place-items: center;
-  min-width: 29px;
-  height: 29px;
-  border-radius: 9px;
-  padding: 0 7px;
-  background: #edf3fb;
-  color: #315b91;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.lead-list {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-  margin-top: 20px;
-}
-
-.lead-item {
-  width: 100%;
-  text-align: left;
-  border: 1px solid #e8edf4;
-  border-radius: 10px;
-  background: #fff;
-  padding: 14px;
-  cursor: pointer;
-  transition: border-color 0.2s, background 0.2s;
-  color: #263a56;
-}
-
-.lead-item:hover {
-  border-color: #9bb5d8;
-  background: #f8faff;
-}
-
-.lead-item.selected {
-  border-color: #4778b8;
-  background: #f0f5fc;
-  box-shadow: inset 3px 0 #315f9e;
-}
-
-.lead-item-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.lead-id {
-  font-size: 10px;
-  color: #75849a;
-  font-weight: 700;
-  overflow-wrap: anywhere;
-}
-
-.lead-item > strong {
-  display: block;
-  font-size: 14px;
-  margin-bottom: 6px;
-}
-
-.lead-meta {
-  color: #8390a1;
-  font-size: 11px;
-}
-
-.fit-tag {
-  font-size: 9px;
-  font-weight: 800;
-  border-radius: 5px;
-  padding: 4px 7px;
-  background: #edf0f4;
-  color: #67758a;
-}
-
-.fit-tag.high {
-  background: #e2f5eb;
-  color: #187d54;
-}
-
-.fit-tag.medium {
-  background: #fff3dc;
-  color: #9a6a14;
-}
-
-.fit-tag.low {
-  background: #fce9e9;
-  color: #ae4d4d;
-}
-
-.directory-note {
-  display: flex;
-  gap: 9px;
-  align-items: flex-start;
-  margin-top: 22px;
-  padding-top: 17px;
-  border-top: 1px solid #edf0f4;
-  color: #7b899b;
-  font-size: 11px;
-  line-height: 1.6;
-}
-
-.info-icon {
-  flex: 0 0 17px;
-  height: 17px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: #eaf0f8;
-  color: #436b9d;
-  font-weight: 800;
-}
-
-.record-label {
-  color: #3973b6;
-  background: #edf4fd;
-  padding: 7px 10px;
-  border-radius: 7px;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.profile-header {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin: 24px 0;
-  padding-bottom: 20px;
-  border-bottom: 1px solid #edf0f4;
-}
-
-.avatar {
-  width: 48px;
-  height: 48px;
-  display: grid;
-  place-items: center;
-  border-radius: 14px;
-  background: #e8eff9;
-  color: #315c94;
-  font-size: 21px;
-  font-weight: 800;
-}
-
-.profile-header h3 {
-  margin: 0;
-  color: #1d3558;
-  font-size: 16px;
-}
-
-.profile-header p {
-  margin: 5px 0 0;
-  color: #8995a5;
-  font-size: 12px;
-}
-
-.detail-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px 24px;
-}
-
-.detail-field {
-  min-width: 0;
-}
-
-.detail-field span,
-.audit-field span {
-  display: block;
-  color: #8793a3;
-  font-size: 10px;
-  margin-bottom: 6px;
-}
-
-.detail-field strong,
-.audit-field strong {
-  display: block;
-  color: #344761;
-  font-size: 12px;
-  overflow-wrap: anywhere;
-  line-height: 1.5;
-}
-
-.full-width {
-  grid-column: 1 / -1;
-}
-
-.engagement-section {
-  border-top: 1px solid #edf0f4;
-  margin-top: 23px;
-  padding-top: 19px;
-}
-
-.engagement-section h3,
-.result-panel h3,
-.evidence-panel h3,
-.agents-panel h3 {
-  margin: 0 0 14px;
-  font-size: 14px;
-  color: #203957;
-}
-
-.event-list {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-}
-
-.event-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 11px;
-}
-
-.event-marker {
-  width: 8px;
-  height: 8px;
-  flex: 0 0 8px;
-  margin-top: 5px;
-  border-radius: 50%;
-  background: #5b86bf;
-  box-shadow: 0 0 0 4px #edf3fa;
-}
-
-.event-item strong {
-  color: #344761;
-  font-size: 12px;
-}
-
-.event-item p {
-  margin: 4px 0;
-  color: #75849a;
-  font-size: 11px;
-}
-
-.event-item span:last-child {
-  color: #9aa5b3;
-  font-size: 10px;
-}
-
-.run-button {
-  width: 100%;
-  min-height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  margin-top: 25px;
-  border: 0;
-  border-radius: 9px;
-  background: #214e86;
-  color: white;
-  font-size: 13px;
-  font-weight: 750;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.run-button:hover:not(:disabled) {
-  background: #163b6d;
-}
-
-.run-button:disabled {
-  opacity: 0.6;
-  cursor: wait;
-}
-
-.run-button span {
-  font-size: 19px;
-}
-
-.button-note {
-  text-align: center;
-  color: #98a2b1;
-  font-size: 10px;
-  margin: 10px 0 0;
-}
-
-.results-section {
-  margin-top: 25px;
-  padding: 25px;
-  border: 1px solid #e5eaf1;
-  border-radius: 13px;
-  background: #f8fafd;
-}
-
-.result-state {
-  border-radius: 20px;
-  background: #eef1f5;
-  color: #778396;
-  padding: 7px 10px;
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.5px;
-}
-
-.result-state.complete {
-  background: #e4f5ed;
-  color: #17845d;
-}
-
-.empty-results {
-  text-align: center;
-  padding: 43px 15px;
-}
-
-.empty-icon {
-  width: 48px;
-  height: 48px;
-  display: grid;
-  place-items: center;
-  margin: 0 auto 14px;
-  border-radius: 14px;
-  background: #eaf0f8;
-  color: #4773a8;
-  font-size: 29px;
-}
-
-.empty-results h3 {
-  color: #294361;
-  font-size: 15px;
-  margin: 0 0 8px;
-}
-
-.empty-results p {
-  max-width: 490px;
-  margin: 0 auto;
-  color: #8793a3;
-  font-size: 12px;
-  line-height: 1.7;
-}
-
-.loading-spinner {
-  width: 35px;
-  height: 35px;
-  margin: 0 auto 17px;
-  border: 3px solid #dce6f2;
-  border-top-color: #315f9e;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.result-content {
-  margin-top: 22px;
-}
-
-.recommendation-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 15px;
-  padding: 22px;
-  border: 1px solid;
-  border-radius: 12px;
-}
-
-.recommendation-card.urgent {
-  background: #fff0ef;
-  border-color: #f2d0cc;
-  color: #a33f3a;
-}
-
-.recommendation-card.soon {
-  background: #fff7e8;
-  border-color: #f1dfb8;
-  color: #946817;
-}
-
-.recommendation-card.nurture {
-  background: #edf5ff;
-  border-color: #d3e2f5;
-  color: #315f95;
-}
-
-.recommendation-card.request {
-  background: #f1effb;
-  border-color: #ded9f3;
-  color: #66569b;
-}
-
-.recommendation-label {
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 1.2px;
-}
-
-.recommendation-card h3 {
-  margin: 7px 0;
-  font-size: 21px;
-  letter-spacing: 0.2px;
-}
-
-.recommendation-card p {
-  margin: 0;
-  font-size: 11px;
-  opacity: 0.8;
-}
-
-.recommendation-symbol {
-  width: 43px;
-  height: 43px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: #ffffffa8;
-  font-size: 21px;
-  font-weight: 800;
-}
-
-.result-columns {
-  display: grid;
-  grid-template-columns: 1.2fr 0.8fr;
-  gap: 15px;
-  margin-top: 16px;
-}
-
-.result-panel,
-.evidence-panel,
-.agents-panel {
-  padding: 20px;
-}
-
-.evidence-list {
-  padding-left: 19px;
-  margin: 0;
-  color: #64748b;
-  font-size: 11px;
-  line-height: 1.8;
-}
-
-.evidence-list li {
-  padding-left: 3px;
-  margin-bottom: 5px;
-}
-
-.subheading {
-  margin-top: 22px !important;
-}
-
-.rule-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-}
-
-.rule-chip {
-  display: inline-block;
-  border-radius: 6px;
-  padding: 7px 9px;
-  background: #edf3fb;
-  color: #345e91;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.audit-field {
-  padding: 10px 0;
-  border-bottom: 1px solid #edf0f4;
-}
-
-.audit-field:last-child {
-  border-bottom: 0;
-}
-
-.agents-panel {
-  margin-top: 16px;
-}
-
-.section-title-row {
-  margin-bottom: 17px;
-}
-
-.section-title-row .eyebrow {
-  margin-bottom: 6px;
-}
-
-.section-title-row h3 {
-  margin: 0;
-}
-
-.agent-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.agent-card {
-  min-width: 0;
-  border: 1px solid #e7ecf3;
-  border-radius: 10px;
-  padding: 15px;
-  background: #fcfdff;
-}
-
-.agent-card-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.agent-number {
-  color: #9ba9ba;
-  font-size: 10px;
-  font-weight: 800;
-}
-
-.agent-status {
-  background: #e8f5ee;
-  color: #27815c;
-  border-radius: 5px;
-  padding: 4px 6px;
-  font-size: 9px;
-  font-weight: 800;
-  overflow-wrap: anywhere;
-}
-
-.agent-card h4 {
-  margin: 12px 0 7px;
-  color: #2a405e;
-  font-size: 12px;
-}
-
-.agent-card p,
-.agent-card li {
-  color: #77869a;
-  font-size: 10px;
-  line-height: 1.6;
-}
-
-.agent-card p {
-  margin: 0;
-}
-
-.agent-card ul {
-  padding-left: 15px;
-  margin: 9px 0 0;
-}
-
-.evidence-panel {
-  margin-top: 16px;
-}
-
-.evidence-panel h3 {
-  margin-bottom: 12px;
-}
-
-.muted {
-  color: #8a96a6;
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.error-banner {
-  margin: 15px 0;
-  border: 1px solid #f0c7c7;
-  border-radius: 9px;
-  background: #fff0f0;
-  color: #a23c3c;
-  padding: 12px 15px;
-  font-size: 12px;
-  overflow-wrap: anywhere;
-}
-
-.footer {
-  display: flex;
-  justify-content: space-between;
-  gap: 15px;
-  padding: 22px 2px 0;
-  color: #9aa4b2;
-  font-size: 10px;
-}
-
-@media (max-width: 1000px) {
-  .app-shell {
-    padding-left: 24px;
-    padding-right: 24px;
-  }
-
-  .metrics-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .workspace-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .lead-list {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .agent-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 650px) {
-  .app-shell {
-    padding: 0 15px 22px;
-  }
-
-  .topbar {
-    min-height: 70px;
-  }
-
-  .brand-subtitle {
-    font-size: 10px;
-  }
-
-  .connection {
-    font-size: 10px;
-  }
-
-  .page-heading {
-    display: block;
-    padding: 28px 0 20px;
-  }
-
-  .system-label {
-    display: inline-flex;
-    margin-top: 17px;
-  }
-
-  .metrics-grid {
-    gap: 9px;
-  }
-
-  .metric-card {
-    padding: 14px;
-    min-height: 105px;
-  }
-
-  .metric-card strong {
-    font-size: 23px;
-  }
-
-  .metric-label {
-    font-size: 9px;
-  }
-
-  .panel,
-  .results-section {
-    padding: 17px;
-  }
-
-  .lead-list {
-    grid-template-columns: 1fr;
-  }
-
-  .detail-grid {
-    gap: 15px;
-  }
-
-  .result-columns {
-    grid-template-columns: 1fr;
-  }
-
-  .agent-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .recommendation-card h3 {
-    font-size: 17px;
-  }
-
-  .footer {
-    flex-direction: column;
-  }
-}
-
-@media (max-width: 380px) {
-  .connection {
-    max-width: 105px;
-    line-height: 1.4;
-  }
-
-  .detail-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .full-width {
-    grid-column: auto;
-  }
-}
-
-/* ==========================================
-   PHASE 2.1 - LANGGRAPH WORKFLOW EXPLAINER
-========================================== */
-
-.explainer-panel,
-.context-summary,
-.audit-inspector {
-  margin-top: 20px;
-  padding: 23px;
-  background: #ffffff;
-  border: 1px solid #e5eaf1;
-  border-radius: 13px;
-  min-width: 0;
-}
-
-.explainer-panel h2,
-.context-summary h3,
-.audit-inspector h3 {
-  color: #172e50;
-  margin: 0;
-  font-size: 18px;
-}
-
-.workflow-intro {
-  color: #718096;
-  font-size: 12px;
-  line-height: 1.8;
-  margin: 13px 0 18px;
-}
-
-.workflow-flow {
-  display: flex;
-  align-items: stretch;
-  justify-content: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin: 22px 0;
-}
-
-.flow-node {
-  flex: 1 1 125px;
-  min-width: 110px;
-  max-width: 190px;
-  min-height: 105px;
-  padding: 13px 10px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 8px;
-  border: 1px solid #dce6f2;
-  border-radius: 10px;
-  background: #f5f8fd;
-  text-align: center;
-}
-
-.flow-node > span {
-  color: #5279aa;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 1px;
-}
-
-.flow-node strong {
-  color: #203957;
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-.flow-node small {
-  color: #8290a3;
-  font-size: 10px;
-  line-height: 1.5;
-}
-
-.context-node {
-  background: #edf5ff;
-  border-color: #cbdcf2;
-}
-
-.agent-flow-node {
-  background: #f1effb;
-  border-color: #ded9f3;
-}
-
-.decision-node {
-  background: #eaf7f1;
-  border-color: #ccebdc;
-}
-
-.flow-arrow {
-  display: grid;
-  place-items: center;
-  color: #6683a8;
-  font-size: 19px;
-  font-weight: 700;
-}
-
-.workflow-note {
-  padding: 14px 16px;
-  border-left: 3px solid #4778b8;
-  border-radius: 6px;
-  background: #f3f7fc;
-  color: #61738b;
-  font-size: 11px;
-  line-height: 1.8;
-}
-
-/* Shared workflow context */
-
-.context-summary {
-  margin: 0 0 16px;
-}
-
-.context-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 18px;
-}
-
-.context-item {
-  min-width: 0;
-  padding: 13px;
-  border: 1px solid #e7edf5;
-  border-radius: 9px;
-  background: #f9fbfe;
-}
-
-.context-item span {
-  display: block;
-  margin-bottom: 7px;
-  color: #8793a3;
-  font-size: 10px;
-}
-
-.context-item strong {
-  display: block;
-  color: #294361;
-  font-size: 11px;
-  line-height: 1.6;
-  overflow-wrap: anywhere;
-}
-
-.context-footnote {
-  margin: 14px 0 0;
-  color: #8793a3;
-  font-size: 10px;
-  line-height: 1.7;
-}
-
-/* Detailed agent outputs */
-
-.agent-responsibility {
-  margin: 9px 0 !important;
-  color: #3e6087 !important;
-  font-size: 11px !important;
-  font-weight: 600;
-}
-
-.agent-input-box {
-  margin-top: 11px;
-  padding: 10px;
-  background: #f0f5fc;
-  border: 1px solid #e0eaf7;
-  border-radius: 7px;
-}
-
-.agent-input-box strong,
-.structured-output > strong,
-.agent-evidence > strong {
-  display: block;
-  color: #45668f;
-  font-size: 10px;
-  margin-bottom: 6px;
-}
-
-.agent-input-box p {
-  margin: 0;
-  color: #75849a;
-  font-size: 10px;
-  line-height: 1.6;
-}
-
-.agent-summary {
-  margin-top: 12px !important;
-  font-size: 11px !important;
-  color: #536780 !important;
-  line-height: 1.7 !important;
-}
-
-.structured-output {
-  margin-top: 13px;
-  padding-top: 12px;
-  border-top: 1px solid #e8edf4;
-}
-
-.structured-output pre,
-.audit-json {
-  max-width: 100%;
-  overflow-x: auto;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  padding: 11px;
-  margin: 7px 0;
-  border-radius: 7px;
-  background: #f3f6fa;
-  color: #42566f;
-  font-family: Consolas, "Courier New", monospace;
-  font-size: 10px;
-  line-height: 1.7;
-}
-
-.agent-score {
-  color: #315f95 !important;
-  font-weight: 700;
-  margin-top: 8px !important;
-}
-
-.agent-evidence {
-  margin-top: 12px;
-  padding-top: 11px;
-  border-top: 1px solid #e8edf4;
-}
-
-.agent-evidence ul {
-  margin: 6px 0 0;
-  padding-left: 16px;
-}
-
-.agent-evidence li {
-  color: #77869a;
-  font-size: 10px;
-  line-height: 1.7;
-  margin-bottom: 5px;
-}
-
-/* Audit inspection */
-
-.audit-inspector {
-  margin-top: 16px;
-}
-
-.audit-inspector .section-title-row {
-  align-items: center;
-}
-
-.audit-button {
-  min-height: 39px;
-  padding: 9px 14px;
-  border: 0;
-  border-radius: 8px;
-  background: #214e86;
-  color: #ffffff;
-  font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.audit-button:hover:not(:disabled) {
-  background: #163b6d;
-}
-
-.audit-button:disabled {
-  opacity: 0.6;
-  cursor: wait;
-}
-
-.audit-record-content {
-  margin-top: 17px;
-  padding-top: 15px;
-  border-top: 1px solid #e7edf5;
-}
-
-.audit-record-status {
-  display: inline-block;
-  padding: 8px 11px;
-  border-radius: 7px;
-  background: #e7f5ed;
-  color: #187d54;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.audit-record-content h4 {
-  margin: 20px 0 10px;
-  color: #294361;
-  font-size: 12px;
-}
-
-.audit-sequence {
-  padding-left: 22px;
-  color: #64748b;
-  font-size: 11px;
-  line-height: 2;
-}
-
-.audit-json {
-  max-height: 500px;
-  overflow-y: auto;
-}
-
-/* Responsive layout */
-
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap");
+
+:root {
+  font-family: "DM Sans", Inter, ui-sans-serif, system-ui, sans-serif;
+  color: #182b43;
+  background: #f5f7fa;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; background: #f5f7fa; }
+button { font: inherit; }
+button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px solid #91b5e7; outline-offset: 3px; }
+.app-shell { max-width: 1320px; margin: 0 auto; padding: 0 34px 34px; }
+.topbar { min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 18px; border-bottom: 1px solid #e4e9f0; }
+.brand { display: flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; }
+.brand-mark { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 12px; background: #183c68; color: #fff; font: 800 15px Manrope, sans-serif; }
+.brand strong, .brand small { display: block; }
+.brand strong { font: 700 14px Manrope, sans-serif; letter-spacing: -.2px; }
+.brand small { color: #7a899b; font-size: 11px; margin-top: 4px; }
+.connection-pill, .engine-label { display: inline-flex; align-items: center; gap: 8px; border: 1px solid #e1e8ef; background: #fff; color: #64748b; border-radius: 30px; padding: 8px 12px; font-size: 11px; font-weight: 600; }
+.connection-pill.connected { color: #167653; background: #f0faf5; border-color: #d6eee2; }
+.connection-pill.disconnected { color: #a34b54; background: #fff7f7; border-color: #f3dfe1; }
+.status-dot { width: 7px; height: 7px; border-radius: 50%; background: #c56a70; display: inline-block; }
+.connected .status-dot, .engine-label .status-dot { background: #20956b; }
+.main-nav { display: flex; align-items: center; gap: 26px; min-height: 53px; border-bottom: 1px solid #e4e9f0; }
+.nav-link { border: 0; background: transparent; color: #718096; font-size: 12px; font-weight: 600; padding: 17px 1px 14px; cursor: pointer; border-bottom: 2px solid transparent; }
+.nav-link.active { color: #183c68; border-color: #285b91; }
+.nav-result { margin-left: auto; color: #21805f; font-size: 11px; font-weight: 600; }
+.welcome-section { display: flex; align-items: flex-end; justify-content: space-between; gap: 28px; padding: 42px 0 29px; }
+.eyebrow { margin: 0 0 8px; color: #6b86a7; font-size: 9px; font-weight: 800; letter-spacing: 1.35px; }
+h1, h2, h3, h4, p { margin-top: 0; }
+h1, h2, h3, h4 { font-family: Manrope, "DM Sans", sans-serif; }
+.welcome-section h1 { margin: 0; color: #18334f; font-size: clamp(27px, 3.5vw, 39px); letter-spacing: -1.4px; line-height: 1.15; }
+.welcome-copy { max-width: 610px; color: #718096; font-size: 13px; line-height: 1.7; margin: 10px 0 0; }
+.welcome-action { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: flex-end; }
+.engine-label { white-space: nowrap; }
+.primary-button, .secondary-button { border-radius: 8px; padding: 11px 15px; font-size: 12px; font-weight: 700; cursor: pointer; transition: background .15s ease, transform .15s ease; }
+.primary-button { border: 1px solid #214f80; background: #214f80; color: #fff; box-shadow: 0 4px 10px #214f8018; }
+.primary-button:hover:not(:disabled) { background: #173d66; transform: translateY(-1px); }
+.primary-button:disabled { opacity: .55; cursor: not-allowed; }
+.primary-button span { margin-left: 10px; }
+.secondary-button { border: 1px solid #d8e1eb; background: #fff; color: #315b83; }
+.secondary-button:hover:not(:disabled) { background: #f4f8fc; }
+.text-button { border: 0; background: transparent; color: #315b83; font-size: 12px; font-weight: 700; cursor: pointer; }
+.metrics-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 33px; }
+.metric-card, .panel, .how-panel, .result-panel { background: #fff; border: 1px solid #e4eaf1; border-radius: 12px; }
+.metric-card { padding: 17px 19px; min-height: 102px; }
+.metric-label { display: block; color: #8794a5; font-size: 9px; font-weight: 800; letter-spacing: .9px; }
+.metric-card strong { display: block; color: #183b64; font: 800 26px Manrope, sans-serif; margin-top: 7px; }
+.metric-card small { display: block; color: #8b97a6; font-size: 10px; margin-top: 3px; }
+.section-block { margin: 0 0 25px; }
+.section-heading { display: flex; justify-content: space-between; align-items: center; gap: 18px; margin-bottom: 16px; }
+.section-heading h2, .section-heading h3 { margin: 0; color: #1b3552; font-size: 20px; letter-spacing: -.5px; }
+.section-copy { margin: 7px 0 0; color: #78879a; font-size: 12px; line-height: 1.65; max-width: 650px; }
+.lead-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; }
+.lead-card { display: block; width: 100%; text-align: left; border: 1px solid #e1e8ef; background: #fff; border-radius: 11px; padding: 16px; color: inherit; cursor: pointer; transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease; }
+.lead-card:hover { border-color: #9bb7d5; box-shadow: 0 8px 22px #183b640d; transform: translateY(-2px); }
+.lead-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.lead-id { color: #69819b; font-size: 10px; font-weight: 700; letter-spacing: .3px; }
+.fit-tag { border-radius: 20px; background: #edf4fb; color: #456d94; padding: 4px 8px; font-size: 9px; font-weight: 700; text-transform: uppercase; }
+.fit-tag.high { background: #eaf7f0; color: #237956; }
+.fit-tag.low { background: #f3f1ec; color: #7d7055; }
+.lead-card h3 { margin: 17px 0 4px; color: #1d3857; font-size: 15px; }
+.lead-card p { margin: 0; color: #8793a2; font-size: 11px; }
+.card-action { display: inline-block; margin-top: 18px; color: #2b5c8d; font-size: 11px; font-weight: 700; }
+.card-action span { margin-left: 5px; }
+.how-panel { padding: 20px; display: grid; grid-template-columns: minmax(210px, .85fr) minmax(0, 2fr); align-items: center; gap: 24px; margin-top: 25px; }
+.how-panel h2 { margin: 0; color: #1b3552; font-size: 17px; line-height: 1.4; }
+.process-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.process-steps div { border-left: 1px solid #e3eaf1; padding: 4px 10px; }
+.process-steps span { display: block; color: #7d9bbb; font-size: 9px; font-weight: 800; margin-bottom: 9px; }
+.process-steps strong, .process-steps small { display: block; }
+.process-steps strong { color: #34506e; font-size: 11px; }
+.process-steps small { color: #8a96a5; font-size: 9px; line-height: 1.5; margin-top: 4px; }
+.workspace { margin: 18px 0 32px; }
+.workspace-heading { margin-bottom: 17px; }
+.workspace-grid { display: grid; grid-template-columns: minmax(220px, .72fr) minmax(0, 1.8fr); align-items: start; gap: 15px; }
+.panel { padding: 20px; min-width: 0; }
+.panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.panel-heading h3 { margin: 0; color: #1b3552; font-size: 16px; }
+.count-badge { display: grid; place-items: center; min-width: 28px; height: 28px; padding: 0 7px; border-radius: 8px; background: #edf3f9; color: #315b83; font-size: 11px; font-weight: 800; }
+.lead-list { display: grid; gap: 8px; margin-top: 17px; }
+.lead-item { display: grid; gap: 6px; width: 100%; text-align: left; border: 1px solid #e5eaf0; border-radius: 9px; background: #fff; padding: 12px; cursor: pointer; color: #30465f; }
+.lead-item:hover { border-color: #a7bdd5; }
+.lead-item.selected { border-color: #628bb5; background: #f3f7fc; box-shadow: inset 3px 0 #315f91; }
+.lead-item strong { font-size: 12px; }
+.lead-item small { color: #8794a4; font-size: 10px; }
+.profile-header { display: flex; align-items: center; gap: 12px; padding: 17px 0; border-bottom: 1px solid #edf0f4; }
+.avatar { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: #eaf1f8; color: #315b83; font: 800 16px Manrope, sans-serif; }
+.profile-header h3 { margin: 0 0 4px; color: #203a58; font-size: 15px; }
+.profile-header p { margin: 0; color: #8491a1; font-size: 11px; }
+.record-label { color: #277653; background: #eff8f3; border: 1px solid #d9eee2; border-radius: 20px; padding: 5px 9px; font-size: 9px; font-weight: 700; }
+.detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; padding: 18px 0; }
+.detail-grid > div { display: grid; gap: 5px; min-width: 0; }
+.detail-grid span, .advanced-meta span { color: #8a96a5; font-size: 10px; }
+.detail-grid strong, .advanced-meta strong { color: #334b65; font-size: 11px; font-weight: 700; overflow-wrap: anywhere; }
+.full-width { grid-column: 1 / -1; }
+.engagement-section { border-top: 1px solid #edf0f4; padding-top: 15px; }
+.subsection-heading { display: flex; justify-content: space-between; align-items: center; }
+.subsection-heading h4 { margin: 0; color: #304963; font-size: 12px; }
+.subsection-heading span { color: #8a96a5; font-size: 10px; }
+.event-list { list-style: none; padding: 0; margin: 13px 0 0; display: grid; gap: 12px; }
+.event-list li { display: flex; gap: 10px; }
+.event-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: #6d93b8; margin-top: 5px; }
+.event-list strong { color: #3b526b; font-size: 11px; }
+.event-list p { margin: 3px 0; color: #7c8999; font-size: 10px; }
+.event-list small { color: #9aa4b1; font-size: 9px; }
+.run-button { margin-top: 18px; }
+.field-note { margin: 8px 0 0; color: #8b97a5; font-size: 10px; line-height: 1.55; }
+.results-section { margin-top: 32px; border-top: 1px solid #e3e9f0; padding-top: 27px; }
+.result-state { border-radius: 20px; padding: 7px 10px; background: #eef1f5; color: #788697; font-size: 9px; font-weight: 800; letter-spacing: .5px; }
+.result-state.complete { background: #edf8f2; color: #247654; }
+.empty-state { min-height: 110px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; border: 1px dashed #d9e2eb; border-radius: 11px; background: #fbfcfd; padding: 24px; color: #7e8b9b; font-size: 11px; }
+.result-empty { margin-top: 15px; min-height: 185px; }
+.result-empty h3 { margin: 0; color: #3b536d; font-size: 15px; }
+.result-empty p { max-width: 460px; margin: 0; color: #8592a1; font-size: 11px; line-height: 1.6; }
+.empty-symbol { color: #8ca4bd; font-size: 25px; }
+.loader { width: 18px; height: 18px; border: 2px solid #d9e3ec; border-top-color: #315f91; border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.result-content { margin-top: 16px; display: grid; gap: 14px; }
+.recommendation-card { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 22px; border: 1px solid; border-radius: 12px; }
+.recommendation-card.urgent { background: #fff7f5; border-color: #f1d9d2; }
+.recommendation-card.soon { background: #fffaf1; border-color: #efe3c7; }
+.recommendation-card.nurture { background: #f3f8fc; border-color: #dce7f1; }
+.recommendation-card.request { background: #f8f6fc; border-color: #e5def1; }
+.recommendation-label { color: #7d8998; font-size: 9px; font-weight: 800; letter-spacing: 1px; }
+.recommendation-card h3 { margin: 7px 0 5px; color: #243d58; font-size: 22px; }
+.recommendation-card p { margin: 0; color: #718094; font-size: 11px; line-height: 1.6; }
+.score-box { display: grid; justify-items: center; gap: 3px; min-width: 90px; padding: 12px; border-radius: 9px; background: #ffffffb8; border: 1px solid #e5eaf0; }
+.score-box strong { color: #284b70; font: 800 22px Manrope, sans-serif; }
+.score-box span { color: #8995a4; font-size: 9px; }
+.result-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.result-panel h3 { margin: 0 0 13px; color: #233d58; font-size: 15px; }
+.evidence-list { padding-left: 18px; margin: 0; color: #5e7085; font-size: 11px; line-height: 1.7; }
+.evidence-list li + li { margin-top: 7px; }
+.next-action { margin-top: 18px; padding: 13px; border-radius: 9px; background: #f2f6fa; border: 1px solid #e4ebf2; }
+.next-action p { margin: 0; color: #34516e; font-size: 11px; line-height: 1.65; }
+.audit-reference { display: grid; gap: 5px; border-top: 1px solid #edf0f4; margin-top: 17px; padding-top: 12px; }
+.audit-reference span { color: #8b97a5; font-size: 9px; }
+.audit-reference strong { color: #34516e; font-size: 10px; overflow-wrap: anywhere; }
+.advanced-panel { border: 1px solid #e1e8ef; border-radius: 11px; background: #fff; }
+.advanced-panel > summary { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 18px; cursor: pointer; list-style: none; }
+.advanced-panel > summary::-webkit-details-marker { display: none; }
+.advanced-panel > summary strong, .advanced-panel > summary small { display: block; }
+.advanced-panel > summary strong { color: #2d4966; font-size: 12px; }
+.advanced-panel > summary small { margin-top: 4px; color: #8a96a5; font-size: 10px; }
+.advanced-toggle { color: #315e8d; font-size: 10px; font-weight: 700; }
+.advanced-panel[open] .advanced-toggle { font-size: 0; }
+.advanced-panel[open] .advanced-toggle::after { content: "Hide details"; font-size: 10px; }
+.advanced-content { border-top: 1px solid #edf0f4; padding: 18px; display: grid; gap: 20px; }
+.advanced-meta { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.advanced-meta > div { display: grid; gap: 5px; min-width: 0; }
+.advanced-subsection h3 { margin: 0 0 12px; color: #304963; font-size: 13px; }
+.rule-list { display: flex; flex-wrap: wrap; gap: 7px; }
+.rule-chip { display: inline-flex; border: 1px solid #e0e8f0; background: #f5f8fb; color: #536c86; border-radius: 6px; padding: 6px 9px; font-size: 9px; }
+.agent-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.agent-card { border: 1px solid #e5eaf0; border-radius: 9px; padding: 13px; min-width: 0; }
+.agent-card-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 9px; }
+.step-number { color: #7894b0; font-size: 9px; font-weight: 800; }
+.agent-status { color: #26805d; background: #eff8f3; border-radius: 20px; padding: 4px 7px; font-size: 8px; font-weight: 700; }
+.agent-card h4 { margin: 0 0 6px; color: #314c68; font-size: 12px; }
+.agent-card p, .agent-card li { color: #758397; font-size: 10px; line-height: 1.55; }
+.agent-card ul { padding-left: 15px; margin: 5px 0; }
+.detail-label { display: block; color: #8491a1; font-size: 9px; margin: 10px 0 4px; }
+.agent-score { color: #315e8d !important; font-weight: 700; }
+.raw-details { margin-top: 9px; }
+.raw-details summary { cursor: pointer; color: #315e8d; font-size: 10px; font-weight: 700; }
+pre { max-width: 100%; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; border-radius: 7px; background: #f5f7fa; color: #536477; padding: 11px; font-size: 9px; line-height: 1.5; }
+.audit-section { border-top: 1px solid #edf0f4; padding-top: 17px; }
+.audit-section .panel-heading { align-items: center; }
+.audit-section .panel-heading h3 { margin-bottom: 4px; }
+.audit-section .panel-heading p { margin: 0; }
+.success-note { color: #237653; font-size: 10px; font-weight: 700; }
+.audit-result { margin-top: 12px; }
+.audit-result .advanced-meta { margin-bottom: 12px; }
+.muted { color: #8793a2; font-size: 11px; line-height: 1.6; }
+.error-banner { margin: 12px 0; padding: 11px 13px; border: 1px solid #f0d5d8; border-radius: 8px; background: #fff6f6; color: #9d4a53; font-size: 11px; overflow-wrap: anywhere; }
+.footer { display: flex; justify-content: space-between; gap: 18px; border-top: 1px solid #e3e9f0; margin-top: 34px; padding-top: 17px; color: #929dab; font-size: 9px; line-height: 1.5; }
 @media (max-width: 900px) {
-  .workflow-flow {
-    justify-content: flex-start;
-  }
-
-  .flow-node {
-    flex-basis: 145px;
-  }
-
-  .context-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+  .app-shell { padding: 0 22px 28px; }
+  .welcome-section { align-items: flex-start; flex-direction: column; }
+  .welcome-action { justify-content: flex-start; }
+  .how-panel { grid-template-columns: 1fr; }
+  .workspace-grid { grid-template-columns: 1fr; }
+  .lead-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-
-@media (max-width: 650px) {
-  .explainer-panel,
-  .context-summary,
-  .audit-inspector {
-    padding: 16px;
-  }
-
-  .workflow-flow {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .flow-node {
-    max-width: none;
-    min-height: 85px;
-  }
-
-  .flow-arrow {
-    transform: rotate(90deg);
-    min-height: 18px;
-  }
-
-  .context-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .audit-inspector .section-title-row {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .audit-button {
-    width: 100%;
-  }
+@media (max-width: 620px) {
+  .app-shell { padding: 0 15px 24px; }
+  .topbar { min-height: 68px; }
+  .brand strong { font-size: 12px; }
+  .brand small { font-size: 10px; }
+  .connection-pill { padding: 7px 9px; font-size: 9px; }
+  .main-nav { gap: 19px; }
+  .welcome-section { padding: 30px 0 22px; }
+  .welcome-section h1 { font-size: 29px; }
+  .welcome-action { align-items: flex-start; flex-direction: column; }
+  .metrics-grid { grid-template-columns: 1fr; gap: 9px; margin-bottom: 25px; }
+  .metric-card { min-height: 82px; padding: 13px 15px; }
+  .metric-card strong { font-size: 22px; }
+  .section-heading { align-items: flex-start; flex-direction: column; }
+  .lead-grid, .result-grid, .agent-grid { grid-template-columns: 1fr; }
+  .process-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .panel { padding: 15px; }
+  .detail-grid { gap: 11px; }
+  .recommendation-card { align-items: flex-start; flex-direction: column; padding: 17px; }
+  .score-box { display: flex; align-items: center; gap: 8px; }
+  .advanced-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .advanced-content { padding: 14px; }
+  .audit-section .panel-heading { align-items: flex-start; flex-direction: column; }
+  .footer { flex-direction: column; gap: 5px; }
 }
 </file>
 
@@ -4246,26 +3603,36 @@ import {
 } from "./api";
 import "./App.css";
 
-const agentGuides: Record<string, { responsibility: string; inputs: string }> = {
-  "Lead Intake Agent": {
-    responsibility: "Checks whether essential lead information is available and valid.",
-    inputs: "Contact name, email or phone, lead stage and source.",
+type View = "overview" | "prioritize";
+
+const agentGuides: Record<string, string> = {
+  "Lead Intake Agent": "Checks whether essential lead information is available and valid.",
+  "Recency Agent": "Evaluates lead age and how recently the lead was contacted.",
+  "Engagement Agent": "Measures recorded engagement from the lead.",
+  "Fit & SLA Agent": "Checks declared lead fit and overdue follow-up commitments.",
+  "Lead Priority Decision Agent": "Combines agent findings and applies deterministic decision rules.",
+};
+
+const recommendationCopy: Record<string, { title: string; description: string; action: string }> = {
+  FOLLOW_UP_NOW: {
+    title: "Follow up now",
+    description: "This lead needs immediate attention based on the available follow-up signals.",
+    action: "Contact the lead as soon as practical and address the overdue commitment.",
   },
-  "Recency Agent": {
-    responsibility: "Evaluates how old the lead is and how recently the lead was contacted.",
-    inputs: "Lead age in days and last contact date.",
+  FOLLOW_UP_SOON: {
+    title: "Follow up soon",
+    description: "This lead should remain high on the team's upcoming follow-up list.",
+    action: "Schedule the next contact and keep the lead moving through the sales process.",
   },
-  "Engagement Agent": {
-    responsibility: "Measures the level of recorded engagement from the lead.",
-    inputs: "Engagement event count and event types.",
+  NURTURE: {
+    title: "Continue nurturing",
+    description: "The available signals suggest a lower immediate follow-up priority.",
+    action: "Continue appropriate nurturing and review again when new engagement is recorded.",
   },
-  "Fit & SLA Agent": {
-    responsibility: "Checks declared lead fit and whether a committed follow-up is overdue.",
-    inputs: "Declared fit, follow-up commitment and due date.",
-  },
-  "Lead Priority Decision Agent": {
-    responsibility: "Combines the preceding agent outputs and applies deterministic decision rules.",
-    inputs: "Intake status, recency, engagement, fit and SLA results.",
+  REQUEST_DATA: {
+    title: "Complete lead information",
+    description: "The system needs additional mandatory information before it can prioritize this lead reliably.",
+    action: "Review the lead record and provide the missing contact or stage information.",
   },
 };
 
@@ -4275,6 +3642,7 @@ function App() {
   const [selectedLeadId, setSelectedLeadId] = useState("");
   const [result, setResult] = useState<WorkflowResponse | null>(null);
   const [auditRecord, setAuditRecord] = useState<AuditRecord | null>(null);
+  const [view, setView] = useState<View>("overview");
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [auditLoading, setAuditLoading] = useState(false);
@@ -4282,7 +3650,6 @@ function App() {
   const [auditError, setAuditError] = useState("");
 
   const selectedLead = leads.find((lead) => lead.lead_id === selectedLeadId) ?? null;
-
   const attentionCount = useMemo(
     () => leads.filter((lead) => lead.pending_follow_up.committed).length,
     [leads]
@@ -4293,42 +3660,31 @@ function App() {
       try {
         setLoading(true);
         setError("");
-
-        const [healthData, leadData] = await Promise.all([
-          checkBackendHealth(),
-          getLeads(),
-        ]);
-
+        const [healthData, leadData] = await Promise.all([checkBackendHealth(), getLeads()]);
         setHealth(healthData);
         setLeads(leadData);
-
-        if (leadData.length > 0) {
-          setSelectedLeadId(leadData[0].lead_id);
-        }
+        if (leadData.length > 0) setSelectedLeadId(leadData[0].lead_id);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Unable to load dashboard.");
+        setError(err instanceof Error ? err.message : "Unable to load the application data.");
       } finally {
         setLoading(false);
       }
     }
-
-    loadDashboard();
+    void loadDashboard();
   }, []);
 
   async function handleRunWorkflow() {
     if (!selectedLead) return;
-
     try {
       setRunning(true);
       setError("");
       setAuditError("");
       setResult(null);
       setAuditRecord(null);
-
       const workflowResult = await runWorkflow(selectedLead);
       setResult(workflowResult);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Workflow execution failed.");
+      setError(err instanceof Error ? err.message : "Prioritization could not be completed.");
     } finally {
       setRunning(false);
     }
@@ -4336,18 +3692,14 @@ function App() {
 
   async function handleLoadAudit() {
     if (!result) return;
-
     try {
       setAuditLoading(true);
       setAuditError("");
       setAuditRecord(null);
-
       const record = await getAuditRecord(result.audit_reference);
       setAuditRecord(record);
     } catch (err) {
-      setAuditError(
-        err instanceof Error ? err.message : "Unable to retrieve audit record."
-      );
+      setAuditError(err instanceof Error ? err.message : "Unable to retrieve the audit record.");
     } finally {
       setAuditLoading(false);
     }
@@ -4361,6 +3713,10 @@ function App() {
     setAuditError("");
   }
 
+  function displayValue(value: string | null | undefined) {
+    return value || "Not provided";
+  }
+
   function recommendationClass(recommendation: string) {
     if (recommendation === "FOLLOW_UP_NOW") return "urgent";
     if (recommendation === "FOLLOW_UP_SOON") return "soon";
@@ -4368,586 +3724,293 @@ function App() {
     return "request";
   }
 
-  function displayValue(value: string | null | undefined) {
-    return value || "Not provided";
-  }
-
-  function formatDetails(details: Record<string, unknown>) {
-    return JSON.stringify(details, null, 2);
-  }
-
   function renderAgentCard(agent: AgentResult, index: number) {
-    const guide = agentGuides[agent.agent_name];
-
     return (
       <article className="agent-card" key={`${agent.agent_name}-${index}`}>
-        <div className="agent-card-top">
-          <span className="agent-number">STEP 0{index + 1}</span>
+        <div className="agent-card-heading">
+          <span className="step-number">0{index + 1}</span>
           <span className="agent-status">{agent.status}</span>
         </div>
-
         <h4>{agent.agent_name}</h4>
-        <p className="agent-responsibility">
-          {guide?.responsibility || "Processes its assigned workflow information."}
-        </p>
-
-        <div className="agent-input-box">
-          <strong>Important inputs</strong>
-          <p>{guide?.inputs || "See the structured output below."}</p>
-        </div>
-
-        <p className="agent-summary">{agent.summary}</p>
-
-        <div className="structured-output">
-          <strong>Structured output</strong>
-          <pre>{formatDetails(agent.details)}</pre>
-          {agent.score !== null && (
-            <p className="agent-score">Score: {agent.score}</p>
-          )}
-        </div>
-
+        <p>{agentGuides[agent.agent_name] || "Processes its assigned workflow information."}</p>
+        <strong className="detail-label">Agent summary</strong>
+        <p>{agent.summary}</p>
+        {agent.score !== null && <p className="agent-score">Score: {agent.score}</p>}
         {agent.evidence.length > 0 && (
-          <div className="agent-evidence">
-            <strong>Evidence produced</strong>
-            <ul>
-              {agent.evidence.map((item, evidenceIndex) => (
-                <li key={evidenceIndex}>{item}</li>
-              ))}
-            </ul>
-          </div>
+          <>
+            <strong className="detail-label">Evidence</strong>
+            <ul>{agent.evidence.map((item, i) => <li key={i}>{item}</li>)}</ul>
+          </>
         )}
+        <details className="raw-details">
+          <summary>View structured output</summary>
+          <pre>{JSON.stringify(agent.details, null, 2)}</pre>
+        </details>
       </article>
     );
   }
 
+  const recommendation = result ? recommendationCopy[result.recommendation] : null;
+
   return (
     <main className="app-shell">
       <header className="topbar">
-        <div className="brand">
-          <div className="brand-mark">A7</div>
-          <div>
-            <div className="brand-name">AA007 Intelligence</div>
-            <div className="brand-subtitle">Sales Operations · Lead Prioritization</div>
-          </div>
-        </div>
-
-        <div className="connection">
-          <span className={`status-dot ${health ? "online" : "offline"}`} />
-          <span>{health ? "Backend connected" : "Backend unavailable"}</span>
+        <a className="brand" href="#top" onClick={() => setView("overview")}>
+          <span className="brand-mark">A7</span>
+          <span>
+            <strong>Lead Follow-up Intelligence</strong>
+            <small>Sales Operations Workspace</small>
+          </span>
+        </a>
+        <div className="topbar-right">
+          <span className={`connection-pill ${health ? "connected" : "disconnected"}`}>
+            <span className="status-dot" />
+            {health ? "System connected" : "System unavailable"}
+          </span>
         </div>
       </header>
 
-      <section className="page-heading">
+      <nav className="main-nav" aria-label="Main navigation">
+        <button className={view === "overview" ? "nav-link active" : "nav-link"} onClick={() => setView("overview")}>Overview</button>
+        <button className={view === "prioritize" ? "nav-link active" : "nav-link"} onClick={() => setView("prioritize")}>Prioritize a lead</button>
+        {result && <span className="nav-result">Latest recommendation ready</span>}
+      </nav>
+
+      <section className="welcome-section" id="top">
         <div>
-          <p className="eyebrow">AGENTIC AI MVP · PHASE 2.2</p>
-          <h1>Lead Follow-up Intelligence</h1>
-          <p className="page-description">
-            Understand how specialized agents evaluate lead information,
-            share workflow context and produce evidence-based decisions.
+          <p className="eyebrow">AA007 · SALES OPERATIONS</p>
+          <h1>Make every follow-up count.</h1>
+          <p className="welcome-copy">
+            Review lead signals, understand follow-up priority, and decide what your team should do next.
           </p>
         </div>
-        <div className="system-label">
-          <span className="system-label-dot" />
-          Deterministic workflow engine
+        <div className="welcome-action">
+          <span className="engine-label"><span className="status-dot" /> Evidence-based prioritization</span>
+          <button className="primary-button" onClick={() => setView("prioritize")}>Prioritize a lead <span aria-hidden="true">→</span></button>
         </div>
       </section>
 
-      {error && <div className="error-banner">{error}</div>}
+      {error && <div className="error-banner" role="alert">{error}</div>}
 
-      <section className="metrics-grid">
-        <article className="metric-card">
-          <span className="metric-label">TOTAL LEADS</span>
-          <strong>{loading ? "—" : leads.length}</strong>
-          <span className="metric-note">Available sample records</span>
-        </article>
-        <article className="metric-card">
-          <span className="metric-label">COMMITTED FOLLOW-UPS</span>
-          <strong>{loading ? "—" : attentionCount}</strong>
-          <span className="metric-note">Require deadline evaluation</span>
-        </article>
-        <article className="metric-card">
-          <span className="metric-label">AGENT FRAMEWORK</span>
-          <strong>05</strong>
-          <span className="metric-note">Specialized workflow agents</span>
-        </article>
-        <article className="metric-card">
-          <span className="metric-label">WORKFLOW STATUS</span>
-          <strong className="metric-status">
-            {result ? "Complete" : running ? "Running" : "Ready"}
-          </strong>
-          <span className="metric-note">Current session</span>
-        </article>
-      </section>
+      {view === "overview" && (
+        <>
+          <section className="metrics-grid" aria-label="Lead overview">
+            <article className="metric-card">
+              <span className="metric-label">SAMPLE LEADS</span>
+              <strong>{loading ? "—" : leads.length}</strong>
+              <small>Available records to review</small>
+            </article>
+            <article className="metric-card">
+              <span className="metric-label">COMMITTED FOLLOW-UPS</span>
+              <strong>{loading ? "—" : attentionCount}</strong>
+              <small>Commitments evaluated by the workflow</small>
+            </article>
+            <article className="metric-card">
+              <span className="metric-label">DECISION OUTCOMES</span>
+              <strong>04</strong>
+              <small>Four supported recommendations</small>
+            </article>
+          </section>
 
-      <section className="explainer-panel">
-        <div className="section-title-row">
-          <div>
-            <p className="eyebrow">HOW THE SYSTEM WORKS</p>
-            <h2>Agent workflow architecture</h2>
-          </div>
-          <span className="count-badge">5 AGENTS</span>
-        </div>
-
-        <p className="workflow-intro">
-          Each workflow run starts with one business lead record. The LangGraph
-          StateGraph executes the five-agent analysis sequence, then uses deterministic conditional routing to select one of four business paths before finalizing the recommendation and audit record.
-        </p>
-
-        <div className="workflow-flow">
-  <div className="flow-node">
-    <span>START</span>
-    <strong>Workflow Start</strong>
-    <small>Incoming lead</small>
-  </div>
-
-  <div className="flow-arrow">→</div>
-
-  <div className="flow-node context-node">
-    <span>01</span>
-    <strong>Initialize Context</strong>
-    <small>Build shared state</small>
-  </div>
-
-  <div className="flow-arrow">→</div>
-
-  <div className="flow-node agent-flow-node">
-    <span>02–05</span>
-    <strong>Four Analysis Agents</strong>
-    <small>Intake, recency, engagement, fit &amp; SLA</small>
-  </div>
-
-  <div className="flow-arrow">→</div>
-
-  <div className="flow-node decision-node">
-    <span>06</span>
-    <strong>Decision Agent</strong>
-    <small>Apply deterministic rules</small>
-  </div>
-
-  <div className="flow-arrow">→</div>
-
-  <div
-    className="route-options"
-    style={{
-      display: "grid",
-      gridTemplateColumns: "repeat(2, minmax(150px, 1fr))",
-      gap: "12px",
-    }}
-  >
-    <div className="flow-node">
-      <span>ROUTE 1</span>
-      <strong>FOLLOW_UP_NOW</strong>
-      <small>Immediate follow-up</small>
-    </div>
-
-    <div className="flow-node">
-      <span>ROUTE 2</span>
-      <strong>FOLLOW_UP_SOON</strong>
-      <small>Follow up soon</small>
-    </div>
-
-    <div className="flow-node">
-      <span>ROUTE 3</span>
-      <strong>NURTURE</strong>
-      <small>Continue nurturing</small>
-    </div>
-
-    <div className="flow-node">
-      <span>ROUTE 4</span>
-      <strong>REQUEST_DATA</strong>
-      <small>Request missing data</small>
-    </div>
-  </div>
-
-  <div className="flow-arrow">→</div>
-
-  <div className="flow-node context-node">
-    <span>07</span>
-    <strong>Finalize</strong>
-    <small>Response and audit</small>
-  </div>
-
-  <div className="flow-arrow">→</div>
-
-  <div className="flow-node">
-    <span>END</span>
-    <strong>Workflow Complete</strong>
-    <small>Final recommendation</small>
-  </div>
-</div></section>
-
-      <div className="workspace-grid">
-        <aside className="panel lead-panel">
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">RECORDS</p>
-              <h2>Lead directory</h2>
-            </div>
-            <span className="count-badge">{leads.length}</span>
-          </div>
-
-          {loading ? (
-            <p className="muted">Loading leads...</p>
-          ) : leads.length === 0 ? (
-            <p className="muted">No lead records available.</p>
-          ) : (
-            <div className="lead-list">
-              {leads.map((lead) => (
-                <button
-                  className={`lead-item ${selectedLeadId === lead.lead_id ? "selected" : ""}`}
-                  key={lead.lead_id}
-                  onClick={() => selectLead(lead.lead_id)}
-                >
-                  <div className="lead-item-top">
-                    <span className="lead-id">{lead.lead_id}</span>
-                    <span className={`fit-tag ${(lead.declared_fit || "unknown").toLowerCase()}`}>
-                      {lead.declared_fit || "UNKNOWN"}
-                    </span>
-                  </div>
-                  <strong>{lead.contact?.name || "Unnamed lead"}</strong>
-                  <span className="lead-meta">
-                    {lead.stage || "No stage"} · {lead.age_days} days old
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div className="directory-note">
-            <span className="info-icon">i</span>
-            Select a lead to inspect its details and run the prioritization workflow.
-          </div>
-        </aside>
-
-        <section className="panel detail-panel">
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">BUSINESS INPUT</p>
-              <h2>Lead details</h2>
-            </div>
-            {selectedLead && <span className="record-label">Selected record</span>}
-          </div>
-
-          {!selectedLead ? (
-            <p className="muted">Select a lead to view its information.</p>
-          ) : (
-            <>
-              <div className="profile-header">
-                <div className="avatar">
-                  {(selectedLead.contact?.name || "L").charAt(0).toUpperCase()}
-                </div>
-                <div>
-                  <h3>{selectedLead.contact?.name || selectedLead.lead_id}</h3>
-                  <p>{selectedLead.contact?.email || selectedLead.lead_id}</p>
-                </div>
-              </div>
-
-              <div className="detail-grid">
-                <div className="detail-field">
-                  <span>Lead ID</span>
-                  <strong>{selectedLead.lead_id}</strong>
-                </div>
-                <div className="detail-field">
-                  <span>Source</span>
-                  <strong>{displayValue(selectedLead.source)}</strong>
-                </div>
-                <div className="detail-field">
-                  <span>Current stage</span>
-                  <strong>{displayValue(selectedLead.stage)}</strong>
-                </div>
-                <div className="detail-field">
-                  <span>Lead age</span>
-                  <strong>{selectedLead.age_days} days</strong>
-                </div>
-                <div className="detail-field">
-                  <span>Declared fit</span>
-                  <strong>{displayValue(selectedLead.declared_fit)}</strong>
-                </div>
-                <div className="detail-field">
-                  <span>Last contact</span>
-                  <strong>{displayValue(selectedLead.last_contact_date)}</strong>
-                </div>
-                <div className="detail-field full-width">
-                  <span>Declared need</span>
-                  <strong>{displayValue(selectedLead.declared_need)}</strong>
-                </div>
-                <div className="detail-field full-width">
-                  <span>Follow-up commitment</span>
-                  <strong>
-                    {selectedLead.pending_follow_up.committed ? "Committed" : "No committed follow-up"}
-                    {selectedLead.pending_follow_up.due_at
-                      ? ` · Due ${selectedLead.pending_follow_up.due_at}`
-                      : ""}
-                  </strong>
-                </div>
-              </div>
-
-              <div className="engagement-section">
-                <h3>Engagement history</h3>
-                {selectedLead.engagement_events.length === 0 ? (
-                  <p className="muted">No engagement events recorded.</p>
-                ) : (
-                  <div className="event-list">
-                    {selectedLead.engagement_events.map((event, index) => (
-                      <div className="event-item" key={`${event.event_type}-${index}`}>
-                        <span className="event-marker" />
-                        <div>
-                          <strong>{event.event_type}</strong>
-                          <p>{event.description || "No additional description"}</p>
-                          <span>{event.occurred_at}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <button
-                className="run-button"
-                onClick={handleRunWorkflow}
-                disabled={running || loading}
-              >
-                {running ? "Executing LangGraph workflow..." : "Run Prioritization"}
-                {!running && <span aria-hidden="true">→</span>}
-              </button>
-              <p className="button-note">
-                Runs the LangGraph workflow with deterministic conditional routing against the selected lead record.
-              </p>
-            </>
-          )}
-        </section>
-      </div>
-
-      <section className="results-section">
-        <div className="results-heading">
-          <div>
-            <p className="eyebrow">DECISION INTELLIGENCE</p>
-            <h2>Workflow results</h2>
-          </div>
-          <span className={`result-state ${result ? "complete" : ""}`}>
-            {running ? "PROCESSING" : result ? "COMPLETED" : "AWAITING EXECUTION"}
-          </span>
-        </div>
-
-        {!result && !running && (
-          <div className="empty-results">
-            <div className="empty-icon">◎</div>
-            <h3>No workflow results yet</h3>
-            <p>Select a lead and run prioritization to see the recommendation,
-              agent outputs, decision rules and supporting evidence.</p>
-          </div>
-        )}
-
-        {running && (
-          <div className="empty-results">
-            <div className="loading-spinner" />
-            <h3>Analyzing lead information</h3>
-            <p>The workflow agents are evaluating the selected record.</p>
-          </div>
-        )}
-
-        {result && (
-          <div className="result-content">
-            <section className="context-summary">
-              <div className="section-title-row">
-                <div>
-                  <p className="eyebrow">CURRENT WORKFLOW RUN</p>
-                  <h3>Run-scoped shared workflow context</h3>
-                </div>
-                <span className="record-label">Active run result</span>
-              </div>
-
-              <div className="context-grid">
-                <div className="context-item">
-                  <span>Workflow ID</span>
-                  <strong>{result.workflow_id}</strong>
-                </div>
-                <div className="context-item">
-                  <span>Lead ID</span>
-                  <strong>{result.lead_id}</strong>
-                </div>
-                <div className="context-item">
-                  <span>Agent results</span>
-                  <strong>{result.agent_outputs.length}</strong>
-                </div>
-                <div className="context-item">
-                  <span>Collected evidence</span>
-                  <strong>{result.evidence.length}</strong>
-                </div>
-                <div className="context-item">
-                  <span>Workflow errors</span>
-                  <strong>{result.errors.length}</strong>
-                </div>
-                <div className="context-item">
-                  <span>Audit reference</span>
-                  <strong>{result.audit_reference}</strong>
-                </div>
-              </div>
-              <p className="context-footnote">
-                Values above come from the completed workflow response. The
-                context is scoped to this execution and is not persistent memory.
-              </p>
-            </section>
-
-            <div className={`recommendation-card ${recommendationClass(result.recommendation)}`}>
+          <section className="section-block">
+            <div className="section-heading">
               <div>
-                <span className="recommendation-label">FINAL RECOMMENDATION</span>
-                <h3>{result.recommendation.replaceAll("_", " ")}</h3>
-                <p>Lead: {result.lead_id}</p>
+                <p className="eyebrow">GET STARTED</p>
+                <h2>Choose a lead to review</h2>
+                <p className="section-copy">Select one of the available sample records to see its business information and run prioritization.</p>
               </div>
-              <div className="recommendation-symbol">✓</div>
+              <button className="secondary-button" onClick={() => setView("prioritize")}>Open lead workspace →</button>
             </div>
-
-            <div className="result-columns">
-              <div className="result-panel">
-                <h3>Decision reasoning</h3>
-                {result.reasons.length > 0 ? (
-                  <ul className="evidence-list">
-                    {result.reasons.map((reason, index) => (
-                      <li key={index}>{reason}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="muted">No additional reasons returned.</p>
-                )}
-
-                <h3 className="subheading">Triggered rules</h3>
-                <div className="rule-list">
-                  {result.triggered_rules.length > 0 ? result.triggered_rules.map((rule) => (
-                    <span className="rule-chip" key={rule}>{rule}</span>
-                  )) : <span className="muted">No rules returned.</span>}
-                </div>
-              </div>
-
-              <div className="result-panel">
-                <h3>Execution audit</h3>
-                <div className="audit-field">
-                  <span>Workflow ID</span>
-                  <strong>{result.workflow_id}</strong>
-                </div>
-                <div className="audit-field">
-                  <span>Audit reference</span>
-                  <strong>{result.audit_reference}</strong>
-                </div>
-                <div className="audit-field">
-                  <span>Agent count</span>
-                  <strong>{result.agent_outputs.length}</strong>
-                </div>
-                <div className="audit-field">
-                  <span>Priority score</span>
-                  <strong>{result.priority_score ?? "Not scored"}</strong>
-                </div>
-              </div>
-            </div>
-
-            <div className="agents-panel">
-              <div className="section-title-row">
-                <div>
-                  <p className="eyebrow">MULTI-AGENT EXECUTION</p>
-                  <h3>Agent activity and structured outputs</h3>
-                </div>
-                <span className="count-badge">{result.agent_outputs.length} agents</span>
-              </div>
-
-              <p className="workflow-intro">
-                The four analysis agents evaluate the lead, and the decision
-                agent combines their outputs and evidence to produce the recommendation.
-              </p>
-
-              <div className="agent-grid">
-                {result.agent_outputs.map((agent, index) =>
-                  renderAgentCard(agent, index)
-                )}
-              </div>
-            </div>
-
-            <div className="evidence-panel">
-              <h3>Consolidated decision evidence</h3>
-              {result.evidence.length > 0 ? (
-                <ul className="evidence-list">
-                  {result.evidence.map((item, index) => (
-                    <li key={index}>{item}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="muted">No consolidated evidence returned.</p>
-              )}
-            </div>
-
-            <section className="audit-inspector">
-              <div className="section-title-row">
-                <div>
-                  <p className="eyebrow">RETRIEVABLE RECORD</p>
-                  <h3>Stored workflow audit</h3>
-                  <p className="muted">
-                    Retrieve the saved execution record using its audit reference.
-                  </p>
-                </div>
-                <button
-                  className="audit-button"
-                  onClick={handleLoadAudit}
-                  disabled={auditLoading}
-                >
-                  {auditLoading ? "Retrieving..." : "Retrieve audit record"}
-                </button>
-              </div>
-
-              {auditError && <div className="error-banner">{auditError}</div>}
-
-              {auditRecord && (
-                <div className="audit-record-content">
-                  <div className="audit-record-status">Audit record retrieved successfully</div>
-                  <div className="context-grid">
-                    <div className="context-item">
-                      <span>Audit reference</span>
-                      <strong>{auditRecord.audit_reference}</strong>
+            {loading ? (
+              <div className="empty-state"><span className="loader" />Loading sample leads…</div>
+            ) : leads.length === 0 ? (
+              <div className="empty-state">No sample leads are currently available. Check the backend connection and try again.</div>
+            ) : (
+              <div className="lead-grid">
+                {leads.map((lead) => (
+                  <button className="lead-card" key={lead.lead_id} onClick={() => { selectLead(lead.lead_id); setView("prioritize"); }}>
+                    <div className="lead-card-top">
+                      <span className="lead-id">{lead.lead_id}</span>
+                      <span className={`fit-tag ${(lead.declared_fit || "unknown").toLowerCase()}`}>{lead.declared_fit || "Fit unknown"}</span>
                     </div>
-                    <div className="context-item">
-                      <span>Execution timestamp (UTC)</span>
-                      <strong>{auditRecord.execution_timestamp}</strong>
-                    </div>
-                    <div className="context-item">
-                      <span>Final recommendation</span>
-                      <strong>{auditRecord.final_recommendation}</strong>
-                    </div>
-                    <div className="context-item">
-                      <span>Recorded agent sequence</span>
-                      <strong>{auditRecord.agent_execution_sequence.length} agents</strong>
-                    </div>
-                  </div>
-
-                  <h4>Recorded execution sequence</h4>
-                  <ol className="audit-sequence">
-                    {auditRecord.agent_execution_sequence.map((name, index) => (
-                      <li key={`${name}-${index}`}>{name}</li>
-                    ))}
-                  </ol>
-
-                  <h4>Stored audit data</h4>
-                  <pre className="audit-json">
-                    {JSON.stringify(auditRecord, null, 2)}
-                  </pre>
-                </div>
-              )}
-
-              <p className="context-footnote">
-                Audit storage is currently in memory. Records are available while
-                the backend process remains running and are cleared when it restarts.
-              </p>
-            </section>
-
-            {result.errors.length > 0 && (
-              <div className="error-banner">
-                {result.errors.map((item, index) => <p key={index}>{item}</p>)}
+                    <h3>{lead.contact?.name || "Unnamed lead"}</h3>
+                    <p>{lead.stage || "Stage not provided"} · {lead.age_days} days old</p>
+                    <span className="card-action">Review lead <span aria-hidden="true">→</span></span>
+                  </button>
+                ))}
               </div>
             )}
+          </section>
+
+          <section className="how-panel">
+            <div>
+              <p className="eyebrow">A CLEAR BUSINESS PROCESS</p>
+              <h2>From lead information to a practical next step</h2>
+              <p className="section-copy">The application evaluates recorded lead details and returns a consistent recommendation with reasons and supporting evidence.</p>
+            </div>
+            <div className="process-steps">
+              <div><span>01</span><strong>Review input</strong><small>Lead details and engagement</small></div>
+              <div><span>02</span><strong>Prioritize</strong><small>Consistent business rules</small></div>
+              <div><span>03</span><strong>Understand why</strong><small>Reasons and evidence</small></div>
+              <div><span>04</span><strong>Take action</strong><small>Recommended next step</small></div>
+            </div>
+          </section>
+        </>
+      )}
+
+      {view === "prioritize" && (
+        <section className="workspace">
+          <div className="section-heading workspace-heading">
+            <div>
+              <p className="eyebrow">LEAD WORKSPACE</p>
+              <h2>Review and prioritize</h2>
+              <p className="section-copy">Choose a sample lead, check the information, and run the prioritization workflow.</p>
+            </div>
+            <button className="text-button" onClick={() => setView("overview")}>← Back to overview</button>
+          </div>
+
+          <div className="workspace-grid">
+            <aside className="panel lead-panel">
+              <div className="panel-heading">
+                <div><p className="eyebrow">AVAILABLE RECORDS</p><h3>Lead list</h3></div>
+                <span className="count-badge">{leads.length}</span>
+              </div>
+              {loading ? <p className="muted">Loading leads…</p> : leads.length === 0 ? <p className="muted">No lead records available.</p> : (
+                <div className="lead-list">
+                  {leads.map((lead) => (
+                    <button className={`lead-item ${selectedLeadId === lead.lead_id ? "selected" : ""}`} key={lead.lead_id} onClick={() => selectLead(lead.lead_id)}>
+                      <span className="lead-id">{lead.lead_id}</span>
+                      <strong>{lead.contact?.name || "Unnamed lead"}</strong>
+                      <small>{lead.stage || "No stage"} · {lead.age_days} days old</small>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </aside>
+
+            <section className="panel detail-panel">
+              <div className="panel-heading">
+                <div><p className="eyebrow">BUSINESS INPUT</p><h3>Lead information</h3></div>
+                {selectedLead && <span className="record-label">Selected lead</span>}
+              </div>
+              {!selectedLead ? <div className="empty-state">Select a lead from the list to review its information.</div> : (
+                <>
+                  <div className="profile-header">
+                    <div className="avatar">{(selectedLead.contact?.name || "L").charAt(0).toUpperCase()}</div>
+                    <div><h3>{selectedLead.contact?.name || selectedLead.lead_id}</h3><p>{selectedLead.contact?.email || selectedLead.contact?.phone || "Contact details not provided"}</p></div>
+                  </div>
+                  <div className="detail-grid">
+                    <div><span>Lead ID</span><strong>{selectedLead.lead_id}</strong></div>
+                    <div><span>Lead source</span><strong>{displayValue(selectedLead.source)}</strong></div>
+                    <div><span>Sales stage</span><strong>{displayValue(selectedLead.stage)}</strong></div>
+                    <div><span>Lead age</span><strong>{selectedLead.age_days} days</strong></div>
+                    <div><span>Declared fit</span><strong>{displayValue(selectedLead.declared_fit)}</strong></div>
+                    <div><span>Last contact</span><strong>{displayValue(selectedLead.last_contact_date)}</strong></div>
+                    <div className="full-width"><span>Declared need</span><strong>{displayValue(selectedLead.declared_need)}</strong></div>
+                    <div className="full-width"><span>Follow-up commitment</span><strong>{selectedLead.pending_follow_up.committed ? "Committed" : "No committed follow-up"}{selectedLead.pending_follow_up.due_at ? ` · Due ${selectedLead.pending_follow_up.due_at}` : ""}</strong></div>
+                  </div>
+                  <div className="engagement-section">
+                    <div className="subsection-heading"><h4>Recorded engagement</h4><span>{selectedLead.engagement_events.length} events</span></div>
+                    {selectedLead.engagement_events.length === 0 ? <p className="muted">No engagement events recorded.</p> : (
+                      <ul className="event-list">
+                        {selectedLead.engagement_events.map((event, index) => <li key={`${event.event_type}-${index}`}><span className="event-dot" /><div><strong>{event.event_type}</strong><p>{event.description || "No additional description"}</p><small>{event.occurred_at}</small></div></li>)}
+                      </ul>
+                    )}
+                  </div>
+                  <button className="primary-button run-button" onClick={handleRunWorkflow} disabled={running || loading || !health}>
+                    {running ? "Evaluating lead…" : "Run prioritization"} {!running && <span aria-hidden="true">→</span>}
+                  </button>
+                  {!health && <p className="field-note">Connect the backend before running prioritization.</p>}
+                  <p className="field-note">The recommendation is based on the selected record and the existing deterministic workflow.</p>
+                </>
+              )}
+            </section>
+          </div>
+        </section>
+      )}
+
+      <section className="results-section">
+        <div className="section-heading">
+          <div><p className="eyebrow">DECISION RESULT</p><h2>Your prioritization result</h2></div>
+          <span className={`result-state ${result ? "complete" : ""}`}>{running ? "IN PROGRESS" : result ? "COMPLETE" : "AWAITING RUN"}</span>
+        </div>
+
+        {!result && !running && <div className="empty-state result-empty"><span className="empty-symbol">◎</span><h3>Your recommendation will appear here</h3><p>Choose a lead and run prioritization. The result will include a clear next step and the evidence behind it.</p></div>}
+        {running && <div className="empty-state result-empty"><span className="loader" /><h3>Reviewing lead signals</h3><p>The prioritization workflow is evaluating the selected lead.</p></div>}
+
+        {result && recommendation && (
+          <div className="result-content">
+            <article className={`recommendation-card ${recommendationClass(result.recommendation)}`}>
+              <div>
+                <span className="recommendation-label">RECOMMENDATION FOR {result.lead_id}</span>
+                <h3>{recommendation.title}</h3>
+                <p>{recommendation.description}</p>
+              </div>
+              <div className="score-box"><strong>{result.priority_score ?? "—"}</strong><span>Priority score</span></div>
+            </article>
+
+            <div className="result-grid">
+              <section className="panel result-panel">
+                <p className="eyebrow">WHY THIS RESULT</p>
+                <h3>Reasons for the recommendation</h3>
+                {result.reasons.length ? <ul className="evidence-list">{result.reasons.map((reason, i) => <li key={i}>{reason}</li>)}</ul> : <p className="muted">No additional reasons were returned.</p>}
+                <div className="next-action">
+                  <span className="eyebrow">RECOMMENDED NEXT ACTION</span>
+                  <p>{recommendation.action}</p>
+                </div>
+              </section>
+              <section className="panel result-panel">
+                <p className="eyebrow">SUPPORTING INFORMATION</p>
+                <h3>Evidence from this lead</h3>
+                {result.evidence.length ? <ul className="evidence-list">{result.evidence.map((item, i) => <li key={i}>{item}</li>)}</ul> : <p className="muted">No consolidated evidence was returned.</p>}
+                <div className="audit-reference"><span>Audit reference</span><strong>{result.audit_reference}</strong></div>
+              </section>
+            </div>
+
+            <details className="advanced-panel">
+              <summary><span><strong>Advanced details</strong><small>Agent contributions, decision rules and audit trace</small></span><span className="advanced-toggle">View details</span></summary>
+              <div className="advanced-content">
+                <div className="advanced-meta">
+                  <div><span>Workflow ID</span><strong>{result.workflow_id}</strong></div>
+                  <div><span>Lead ID</span><strong>{result.lead_id}</strong></div>
+                  <div><span>Agent results</span><strong>{result.agent_outputs.length}</strong></div>
+                  <div><span>Triggered rules</span><strong>{result.triggered_rules.length}</strong></div>
+                </div>
+                <section className="advanced-subsection">
+                  <h3>Triggered decision rules</h3>
+                  {result.triggered_rules.length ? <div className="rule-list">{result.triggered_rules.map((rule) => <span className="rule-chip" key={rule}>{rule}</span>)}</div> : <p className="muted">No triggered rules were returned.</p>}
+                </section>
+                <section className="advanced-subsection">
+                  <h3>Agent contributions</h3>
+                  <div className="agent-grid">{result.agent_outputs.map(renderAgentCard)}</div>
+                </section>
+                <section className="advanced-subsection audit-section">
+                  <div className="panel-heading"><div><h3>Audit record</h3><p className="muted">Retrieve the record using the reference generated for this workflow run.</p></div><button className="secondary-button" onClick={handleLoadAudit} disabled={auditLoading}>{auditLoading ? "Retrieving…" : "Retrieve audit record"}</button></div>
+                  {auditError && <div className="error-banner" role="alert">{auditError}</div>}
+                  {auditRecord && (
+                    <div className="audit-result">
+                      <p className="success-note">Audit record retrieved.</p>
+                      <div className="advanced-meta">
+                        <div><span>Audit reference</span><strong>{auditRecord.audit_reference}</strong></div>
+                        <div><span>Execution time (UTC)</span><strong>{auditRecord.execution_timestamp}</strong></div>
+                        <div><span>Final recommendation</span><strong>{auditRecord.final_recommendation}</strong></div>
+                        <div><span>Agent sequence</span><strong>{auditRecord.agent_execution_sequence.length} agents</strong></div>
+                      </div>
+                      <details className="raw-details"><summary>View recorded execution sequence and data</summary><ol>{auditRecord.agent_execution_sequence.map((name, i) => <li key={`${name}-${i}`}>{name}</li>)}</ol><pre>{JSON.stringify(auditRecord, null, 2)}</pre></details>
+                    </div>
+                  )}
+                  <p className="field-note">Audit records are currently held in memory and are cleared when the backend restarts.</p>
+                </section>
+              </div>
+            </details>
+            {result.errors.length > 0 && <div className="error-banner">{result.errors.map((item, i) => <p key={i}>{item}</p>)}</div>}
           </div>
         )}
       </section>
 
       <footer className="footer">
         <span>AA007 · Lead Follow-up Prioritization Intelligence</span>
-        <span>Phase 2.2 · LangGraph conditional routing with deterministic decisions</span>
+        <span>Recommendations are evidence-based decision support; customer contact remains a human action.</span>
       </footer>
     </main>
   );
@@ -5452,413 +4515,130 @@ def test_all_conditional_routes_are_recorded_in_audit():
 </file>
 
 <file path="README.md">
-# AA007 - Lead Follow-up Prioritization Intelligence
+# AA007 — Lead Follow-up Prioritization Intelligence
 
-**Agentic AI MVP | RealRails Agentic AI Internship | Phase 1.4 - Cloud Deployment | Phase 2.1 - LangGraph Linear Orchestration | Phase 2.2 - Conditional Routing | Phase 2.3 - Controlled LLM Enhancement**
+**RealRails Agentic AI Internship | Agentic AI MVP | Phase 3.1**
 
 ## 1. Project Overview
 
-AA007 is a deterministic, multi-agent lead follow-up prioritization system. It evaluates business lead information, contact recency, engagement activity, declared fit and follow-up commitments to recommend the next appropriate action.
+AA007 is a deterministic, multi-agent lead follow-up prioritization application. It evaluates lead information, contact recency, engagement, declared fit, and follow-up commitments to recommend an appropriate business action.
 
-The application helps sales operations teams understand which leads need immediate attention, which should receive follow-up soon, and which can be nurtured.
+## 2. Phase 3.1 Business Experience
 
-## 2. Project Objectives
+The business-facing interface presents:
+- Recommended action
+- Reasons behind the recommendation
+- Evidence from the lead record
+- Recommended next action
 
-- Evaluate business lead records using specialized agents.
-- Execute agents in a defined sequence.
-- Share information through a run-scoped shared workflow context.
-- Apply deterministic decision rules.
-- Generate recommendations with supporting reasons and evidence.
-- Record and retrieve workflow audit information.
-- Explain the decision-making process through a user-friendly interface.
+Technical agent contributions, decision details, and audit information are available under the collapsed **Advanced details** section.
 
-## 3. Technology Stack
+Customer contact remains a human decision and action.
 
-| Component | Technology |
-|---|---|
-| Backend | Python, FastAPI |
-| Frontend | React, Vite, TypeScript |
-| Styling | CSS |
-| Data validation | Pydantic |
-| Testing | Pytest |
-| Version control | Git, GitHub |
-| Codebase snapshot | Repomix |
+## 3. Deterministic Recommendations
 
-## 4. Workflow Architecture
-
-The application uses a **linear LangGraph StateGraph** to orchestrate the existing deterministic lead-prioritization workflow.
-
-Execution follows this sequence:
-
-**START â†’ Initialize Context â†’ Lead Intake â†’ Recency â†’ Engagement â†’ Fit & SLA â†’ Decision â†’ Finalize â†’ END**
-
-The graph contains seven execution nodes:
-- `initialize_context` â€” creates the run-scoped workflow context.
-- `lead_intake` â€” validates the lead information.
-- `recency` â€” evaluates the last contact date.
-- `engagement` â€” evaluates engagement activity.
-- `fit_sla` â€” evaluates lead fit and follow-up SLA.
-- `decision` â€” applies the existing deterministic business rules.
-- `finalize` â€” prepares the response and records the audit information.
-
-The five existing agents and their deterministic business rules are preserved. Graph execution events are recorded in the audit trace.
-
-The context remains run-scoped and is not permanent memory.
-## 5. Five Specialized Agents
-
-| Order | Agent | Responsibility |
+| Rule | Recommendation | Condition |
 |---|---|---|
-| 1 | Lead Intake Agent | Checks essential lead information and validates intake details. |
-| 2 | Recency Agent | Evaluates lead age and how recently the lead was contacted. |
-| 3 | Engagement Agent | Evaluates recorded engagement events. |
-| 4 | Fit & SLA Agent | Evaluates declared fit and follow-up commitment status. |
-| 5 | Lead Priority Decision Agent | Combines agent results and applies deterministic decision rules. |
+| AA007-RULE-01 | REQUEST_DATA | Mandatory lead information is incomplete |
+| AA007-RULE-02 | FOLLOW_UP_NOW | A committed follow-up is overdue |
+| AA007-RULE-03 | FOLLOW_UP_NOW | High fit, recent contact, and engagement |
+| AA007-RULE-04 | NURTURE | Stale contact and low engagement |
+| AA007-RULE-05 | FOLLOW_UP_SOON | Default when no higher-priority rule applies |
 
-## 6. Decision Outcomes
+The recommendation is determined by business rules, not by the LLM.
 
-The workflow produces one of four recommendations:
+## 4. Technology Stack
 
-- `FOLLOW_UP_NOW` â€” Immediate follow-up is required.
-- `FOLLOW_UP_SOON` â€” Follow-up should be scheduled soon.
-- `NURTURE` â€” Continue nurturing the lead rather than prioritizing immediate follow-up.
-- `REQUEST_DATA` â€” Request missing mandatory information.
+- Python, FastAPI and LangGraph
+- Pydantic
+- Gemini and OpenAI provider integration
+- React, Vite, TypeScript and CSS
+- Pytest, Git, GitHub and Repomix
 
-## 7. Deterministic Decision Rules
+## 5. Controlled LLM Enhancement
 
-| Rule | Condition | Recommendation |
-|---|---|---|
-| AA007-RULE-01 | Mandatory lead information is missing | REQUEST_DATA |
-| AA007-RULE-02 | A committed follow-up is overdue | FOLLOW_UP_NOW |
-| AA007-RULE-03 | High fit, recent contact and high or moderate engagement | FOLLOW_UP_NOW |
-| AA007-RULE-04 | Stale contact and low engagement | NURTURE |
-| AA007-RULE-05 | Default decision when no earlier rule applies | FOLLOW_UP_SOON |
+Gemini integration supports sales-note summarization and approved intent-tag extraction.
 
-## 8. Sample Scenarios
+LLM output does not calculate priority, override deterministic recommendations, change business rules, or control workflow routing. Structured validation and deterministic fallback handling are retained.
 
-| Sample Lead | Scenario | Expected Outcome |
-|---|---|---|
-| AA007-HOT-001 | Overdue committed follow-up | FOLLOW_UP_NOW |
-| AA007-WARM-001 | Moderate fit and recent engagement | FOLLOW_UP_SOON |
-| AA007-STALE-001 | Stale contact and no engagement | NURTURE |
+Keep provider credentials in the local backend environment file. Never commit API keys.
 
-These sample scenarios demonstrate the different decision paths.
+## 6. Workflow and Audit
 
-## 9. Explainability and Audit
+Specialized agents evaluate:
+1. Lead intake
+2. Contact recency
+3. Engagement
+4. Fit and SLA
+5. Deterministic decision
+6. Finalization and audit recording
 
-The frontend displays:
+Each execution returns a recommendation, reasons, triggered rules, agent outputs, evidence, and an audit reference.
 
-- Business lead information.
-- Workflow architecture.
-- Agent execution order and responsibilities.
-- Important inputs for each agent.
-- Structured agent outputs.
-- Collected evidence.
-- Triggered decision rules.
-- Final recommendation and reasoning.
-- Workflow ID and audit reference.
-
-The audit endpoint retrieves the stored execution record, including its timestamp, agent sequence, outputs, triggered rules and recommendation.
-
-**Audit storage limitation:** Records are currently held in backend memory and are cleared when the backend process restarts. This MVP does not use persistent audit storage.
-
-## 10. Project Structure
-
-```text
-AA007-Lead-Followup-Intelligence/
-|
-|-- backend/
-|   |-- app/
-|   |   |-- agents/
-|   |   |-- core/
-|   |   |-- data/
-|   |   |-- models/
-|   |   |-- services/
-|   |   |-- main.py
-|   |-- tests/
-|   |-- requirements.txt
-|
-|-- frontend/
-|   |-- src/
-|   |   |-- App.tsx
-|   |   |-- App.css
-|   |   |-- api.ts
-|   |-- package.json
-|
-|-- AA007-Repomix.xml
-|-- README.md
-```
-
-## 11. Running the Application
-
-### Backend setup
-
-Open PowerShell in the project root:
-
-```powershell
-python -m venv backend/.venv
-
-.\backend\.venv\Scripts\Activate.ps1
-
-pip install -r backend/requirements.txt
-```
-
-Start the backend:
-
-```powershell
-python -m uvicorn app.main:app --app-dir backend --reload
-```
-
-Backend URL:
-
-http://127.0.0.1:8000
-
-API documentation:
-
-http://127.0.0.1:8000/docs
-
-### Frontend setup
-
-Open a second terminal:
-
-```powershell
-cd frontend
-
-npm.cmd install
-
-npm.cmd run dev -- --host 127.0.0.1
-```
-
-Frontend URL:
-
-http://127.0.0.1:5173
-
-## 12. API Endpoints
+## 7. API Endpoints
 
 | Method | Endpoint | Purpose |
 |---|---|---|
-| GET | `/` | Backend welcome information |
-| GET | `/health` | Backend health check |
-| GET | `/leads` | Retrieve sample leads |
-| POST | `/workflow/run` | Execute the five-agent workflow |
-| GET | `/audit/{audit_reference}` | Retrieve a workflow audit record |
+| GET | `/` | API status |
+| GET | `/health` | Health check |
+| GET | `/leads` | Seeded demonstration leads |
+| POST | `/workflow/run` | Run lead prioritization |
+| GET | `/audit/{audit_reference}` | Retrieve audit record |
 
-## 13. Testing
+Interactive API documentation: `/docs`.
 
-Run the backend test suite from the project root:
+## 8. Running the Application
 
-```powershell
-.\backend\.venv\Scripts\python.exe -m pytest -q
+Backend:
+```bash
+cd backend
+pip install -r requirements.txt
+uvicorn app.main:app --reload
 ```
 
-Frontend production build:
-
-```powershell
+Frontend:
+```bash
 cd frontend
-
-npm.cmd run build
+npm install
+npm run dev
 ```
 
-### Verified development results
+Configure environment variables using `backend/.env.example`. Keep actual credentials in `backend/.env`.
 
-- Backend tests: 16 passed in the latest Phase 2.2 validation.
-- Frontend TypeScript compilation: passed.
-- Vite production build: passed.
-- HOT, WARM and STALE sample scenarios: passed.
-- Audit record retrieval: demonstrated successfully.
+## 9. Phase 3.1 Verification
 
-## 14. Scope and Limitations
-
-This project is a deterministic MVP.
-
-- Agent decisions use implemented Python logic and rules.
-- Workflow context is limited to an individual execution.
-- Audit records are stored in memory.
-- The project does not claim persistent database storage or permanent memory.
-
-## 15. Cloud Deployment â€” Phase 1.4
-
-The application is deployed on Render.
-
-| Component | URL |
-|---|---|
-| Frontend Application | https://aa007-lead-followup-intelligence.onrender.com/ |
-| Backend Health Endpoint | https://aa007-backend-vd1y.onrender.com/health |
-
-### Deployment Validation
-
-The Phase 1.4 deployment was reviewed and accepted by the RealRails maintainer.
-
-Validated deployment capabilities:
-
-- Public Render frontend availability.
-- Backend health endpoint availability.
-- Frontend-to-backend communication.
-- Sample lead loading.
-- Execution of all five deterministic agents.
-- Correct recommendation generation.
-- Explanation and supporting evidence.
-- Audit record retrieval.
-- Workflow completion without errors.
-- No LangGraph or LLM introduced during Phase 1.
-
-### Phase 1.4 Deployment Commit
-
-`b9a8e2e324876515b2b8edae8e41502ac4e05737`
-
-### Final Repository Cleanup Commit
-
-```text
-4af85737a0d5c7b2ad4718f346a83255e899be3f
-```
-
-## 16. Repository
-
-GitHub:
-
-https://github.com/dhanushacherian/AA007-Lead-Followup-Intelligence
-
-**Project status:** Phase 1.4 implementation accepted. Final repository documentation and Repomix cleanup complete the Phase 1 closure requirements.
-
----
-
-**AA007 â€” Lead Follow-up Prioritization Intelligence**
-
-*Explainable deterministic multi-agent workflow for sales lead prioritization.*
-
-## 16. Phase 2.1 â€” LangGraph Linear Orchestration
-
-Phase 2.1 evolves the existing Phase 1 deterministic workflow into a linear LangGraph orchestration.
-
-### Implementation
-
-- Introduced a shared LangGraph state for workflow execution.
-- Converted the existing workflow steps into seven linear graph nodes.
-- Preserved all five existing agents and deterministic decision rules.
-- Preserved the existing API response contract and recommendation behavior.
-- Added graph execution tracing with node start and completion events.
-- Extended audit records to include the graph execution trace.
-- Updated the frontend architecture explanation to reflect LangGraph orchestration.
-
-### Validation
-
-- LangGraph graph compilation and execution verified.
-- HOT, WARM and STALE lead scenarios tested.
-- Expected deterministic recommendations preserved.
-- Backend tests: 15 passed.
-- Frontend production build: passed.
-- Updated Repomix snapshot: `AA007-Repomix.xml`.
-
-### Phase 2.1 Git Commit
-
-`ca050826837201dd7f003fe3b68cde8c993f83ad`
-
-**Project status:** Phase 1.4 deployment documentation retained. Phase 2.1 LangGraph linear orchestration implemented and committed.
-## 17. Phase 2.2 â€” Meaningful Conditional Routing
-
-Phase 2.2 extends the LangGraph workflow with deterministic conditional routing based on the existing decision-agent recommendations.
-
-### Conditional routes
-
-| Business condition | Recommendation | Graph route |
-|---|---|---|
-| Missing mandatory lead information | REQUEST_DATA | route_request_data |
-| Committed follow-up overdue | FOLLOW_UP_NOW | route_follow_up_now |
-| High fit, recent contact and high or moderate engagement | FOLLOW_UP_NOW | route_follow_up_now |
-| Stale contact and low engagement | NURTURE | route_nurture |
-| No earlier rule matched | FOLLOW_UP_SOON | route_follow_up_soon |
-
-### Implementation
-
-- Preserved the five existing specialized agents and their deterministic decision rules.
-- Added four conditional route nodes after the decision node.
-- Connected each route to the shared finalize node.
-- Recorded route start and completion events in the graph execution trace and audit record.
-- Preserved the existing workflow response and audit retrieval behavior.
-- Did not introduce random routing or invent weighted-score thresholds.
-
-### Latest validation
-
-- Backend tests: 16 passed.
-- Frontend TypeScript compilation: passed.
-- Vite production build: passed.
-- All four conditional routes verified by automated tests.
-- Repomix snapshot regenerated: `AA007-Repomix.xml`.
-- Repomix security check: no suspicious files detected.
-
-**Project status:** Phase 2.2 conditional routing implemented and committed. All four conditional routes passed automated testing. Live NURTURE route execution and audit retrieval were successfully demonstrated. Backend tests, frontend compilation, production build and Repomix validation passed.
-
----
-
-## 18. Phase 2.3 - Controlled LLM Enhancement
-
-Phase 2.3 introduces an optional LLM enhancement for sales-note summarization and intent tagging.
-
-### Architecture
-
-The five existing specialized agents and deterministic business rules remain unchanged.
-
-Workflow sequence:
-
-Initialize Context -> Lead Intake -> Recency -> Engagement -> Fit & SLA -> Decision -> LLM Enhancement -> Conditional Routing -> Finalize
-
-The LLM enhancement runs after the deterministic decision and before conditional routing. It does not replace deterministic decision authority.
-
-### LLM responsibilities
-
-- Summarize supplied sales notes.
-- Extract supported, non-sensitive intent tags.
-- Validate structured output.
-- Avoid inventing facts.
-- Use deterministic fallback when credentials are missing, provider calls fail, or output is invalid.
-
-### Supported intent tags
-
-- DEMO_INTEREST
-- PRICING_INTEREST
-- FUTURE_DECISION
-- PRODUCT_INTEREST
-- UNCLEAR
-
-### Reliability and audit
-
-The implementation includes a dedicated LLM service, configurable provider settings, bounded input and output lengths, structured output validation, deterministic fallback, and audit metadata.
-
-API keys and raw sales-note content are not included in LLM audit metadata.
-
-### Evaluation results
+All four deterministic recommendation scenarios passed through the actual LangGraph workflow:
 
 | Scenario | Result |
 |---|---|
-| Normal sales-note input | PASS |
-| Ambiguous sales notes | PASS |
-| Invalid structured output rejected | PASS |
-| Malformed provider response fallback | PASS |
-| Provider timeout fallback | PASS |
+| Incomplete lead information | PASS — REQUEST_DATA |
+| High fit and recent engagement | PASS — FOLLOW_UP_NOW |
+| Stale contact and no engagement | PASS — NURTURE |
+| Valid lead with no higher-priority trigger | PASS — FOLLOW_UP_SOON |
 
-Backend tests: 21 passed.
+**Backend scenario result: 4/4 passed.**
 
-Architecture integration and structured output validation: PASS.
+Evidence: `docs/phase3-evidence/four-outcome-verification.json`
 
-### Configuration
+Backend regression tests:
+```bash
+pytest -v --tb=short
+```
 
-See backend/.env.example for the optional provider configuration template.
+Frontend production build:
+```bash
+npm run build
+```
 
-Never commit real API credentials.
+## 10. Previous Phase Evidence
 
-### Current limitation
+Gemini integration and LLM validation evidence are retained in `docs/phase2-evidence/`.
 
-Live OpenAI API execution has not yet been verified. The five evaluation scenarios used deterministic fallback and mocked provider responses.
+## 11. Product Boundary
 
-### Evaluation evidence
+AA007 provides evidence-based decision support. Users remain responsible for reviewing recommendations and deciding whether and how to contact customers.
 
-See [Phase 2.3 Evaluation Evidence](docs/phase23-evidence/PHASE23_EVALUATION.md).
-
-### Phase 2.3 commits
-
-- Implementation: 9b9d7cc
-- Evaluation evidence: 1878119
-
-Project status: Phase 2.3 implementation and five-scenario evaluation completed. Live provider execution remains pending.
+**Repository:** https://github.com/dhanushacherian/AA007-Lead-Followup-Intelligence
 </file>
 
 </files>

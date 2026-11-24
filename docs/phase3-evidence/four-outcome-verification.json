@@ -1,0 +1,159 @@
+{
+  "phase": "3.1",
+  "test": "four_deterministic_recommendation_outcomes",
+  "total": 4,
+  "passed": 4,
+  "failed": 0,
+  "results": [
+    {
+      "scenario": "REQUEST_DATA",
+      "expected": "REQUEST_DATA",
+      "actual": "REQUEST_DATA",
+      "passed": true,
+      "lead_id": "PHASE31-REQUEST-DATA",
+      "triggered_rules": [
+        "AA007-RULE-01"
+      ],
+      "reasons": [
+        "Contact details are missing."
+      ],
+      "evidence": [
+        "Contact details are missing.",
+        "Lead age: 2 days.",
+        "Days since last contact: 0.",
+        "Recorded engagement events: 0.",
+        "Declared fit: HIGH.",
+        "Follow-up committed: False.",
+        "No follow-up due date is available.",
+        "Recommendation: REQUEST_DATA",
+        "Contact details are missing.",
+        "Rules triggered: AA007-RULE-01"
+      ],
+      "audit_reference": "AUDIT-AA007-04C80C9BD8CE",
+      "llm_metadata": {
+        "llm_used": "False",
+        "provider": "gemini",
+        "model": "gemini-3.5-flash-lite",
+        "status": "fallback",
+        "fallback_used": "True",
+        "validation_status": "not_applicable"
+      }
+    },
+    {
+      "scenario": "FOLLOW_UP_NOW",
+      "expected": "FOLLOW_UP_NOW",
+      "actual": "FOLLOW_UP_NOW",
+      "passed": true,
+      "lead_id": "PHASE31-FOLLOW-UP-NOW",
+      "triggered_rules": [
+        "AA007-RULE-03"
+      ],
+      "reasons": [
+        "Declared fit is HIGH.",
+        "Lead contact is recent.",
+        "Engagement activity is recorded."
+      ],
+      "evidence": [
+        "Lead ID: PHASE31-FOLLOW-UP-NOW",
+        "Lead stage: NEW",
+        "Lead source: Website",
+        "Lead age: 1 days.",
+        "Days since last contact: 0.",
+        "Recorded engagement events: 1.",
+        "Engagement event: INQUIRY",
+        "Declared fit: HIGH.",
+        "Follow-up committed: False.",
+        "No follow-up due date is available.",
+        "Recommendation: FOLLOW_UP_NOW",
+        "Declared fit is HIGH.",
+        "Lead contact is recent.",
+        "Engagement activity is recorded.",
+        "Rules triggered: AA007-RULE-03"
+      ],
+      "audit_reference": "AUDIT-AA007-5E9ADA6A85F4",
+      "llm_metadata": {
+        "llm_used": "False",
+        "provider": "gemini",
+        "model": "gemini-3.5-flash-lite",
+        "status": "fallback",
+        "fallback_used": "True",
+        "validation_status": "not_applicable"
+      }
+    },
+    {
+      "scenario": "NURTURE",
+      "expected": "NURTURE",
+      "actual": "NURTURE",
+      "passed": true,
+      "lead_id": "PHASE31-NURTURE",
+      "triggered_rules": [
+        "AA007-RULE-04"
+      ],
+      "reasons": [
+        "Lead contact is stale.",
+        "No engagement events are recorded."
+      ],
+      "evidence": [
+        "Lead ID: PHASE31-NURTURE",
+        "Lead stage: NEW",
+        "Lead source: Event",
+        "Lead age: 30 days.",
+        "Days since last contact: 20.",
+        "Recorded engagement events: 0.",
+        "Declared fit: LOW.",
+        "Follow-up committed: False.",
+        "No follow-up due date is available.",
+        "Recommendation: NURTURE",
+        "Lead contact is stale.",
+        "No engagement events are recorded.",
+        "Rules triggered: AA007-RULE-04"
+      ],
+      "audit_reference": "AUDIT-AA007-1AFB663AB970",
+      "llm_metadata": {
+        "llm_used": "False",
+        "provider": "gemini",
+        "model": "gemini-3.5-flash-lite",
+        "status": "fallback",
+        "fallback_used": "True",
+        "validation_status": "not_applicable"
+      }
+    },
+    {
+      "scenario": "FOLLOW_UP_SOON",
+      "expected": "FOLLOW_UP_SOON",
+      "actual": "FOLLOW_UP_SOON",
+      "passed": true,
+      "lead_id": "PHASE31-FOLLOW-UP-SOON",
+      "triggered_rules": [
+        "AA007-RULE-05"
+      ],
+      "reasons": [
+        "No immediate-follow-up or nurture rule was triggered."
+      ],
+      "evidence": [
+        "Lead ID: PHASE31-FOLLOW-UP-SOON",
+        "Lead stage: CONTACTED",
+        "Lead source: Referral",
+        "Lead age: 8 days.",
+        "Days since last contact: 7.",
+        "Recorded engagement events: 1.",
+        "Engagement event: EMAIL_REPLY",
+        "Declared fit: MEDIUM.",
+        "Follow-up committed: False.",
+        "No follow-up due date is available.",
+        "Recommendation: FOLLOW_UP_SOON",
+        "No immediate-follow-up or nurture rule was triggered.",
+        "Rules triggered: AA007-RULE-05"
+      ],
+      "audit_reference": "AUDIT-AA007-A48358231169",
+      "llm_metadata": {
+        "llm_used": "False",
+        "provider": "gemini",
+        "model": "gemini-3.5-flash-lite",
+        "status": "fallback",
+        "fallback_used": "True",
+        "validation_status": "not_applicable"
+      }
+    }
+  ]
+}
