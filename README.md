@@ -1,124 +1,181 @@
-# AA007 — Lead Follow-up Prioritization Intelligence
+# AA007 â€” Lead Follow-up Prioritization Intelligence
 
-**RealRails Agentic AI Internship | Agentic AI MVP | Phase 3.1**
+**RealRails Agentic AI Internship â€” Batch 2 | Phase 3.2**
 
-## 1. Project Overview
+A business-focused, five-agent lead follow-up decision-support application using deterministic business rules, LangGraph orchestration and controlled LLM enhancement.
 
-AA007 is a deterministic, multi-agent lead follow-up prioritization application. It evaluates lead information, contact recency, engagement, declared fit, and follow-up commitments to recommend an appropriate business action.
+## Business Problem
 
-## 2. Phase 3.1 Business Experience
+Sales teams need a consistent way to prioritize lead follow-up using contact recency, engagement, declared fit and pending follow-up commitments instead of manual guesswork.
 
-The business-facing interface presents:
-- Recommended action
-- Reasons behind the recommendation
+## Product Solution
+
+AA007 evaluates structured lead information and provides:
+- A recommended business action
+- Reasons supporting the recommendation
 - Evidence from the lead record
-- Recommended next action
+- Agent outputs and decision details
+- An audit reference for workflow review
 
-Technical agent contributions, decision details, and audit information are available under the collapsed **Advanced details** section.
+Primary users: sales coordinators, inside sales representatives and sales operations leads.
 
-Customer contact remains a human decision and action.
+Customer contact remains a human decision.
 
-## 3. Deterministic Recommendations
+## Architecture
 
-| Rule | Recommendation | Condition |
-|---|---|---|
-| AA007-RULE-01 | REQUEST_DATA | Mandatory lead information is incomplete |
-| AA007-RULE-02 | FOLLOW_UP_NOW | A committed follow-up is overdue |
-| AA007-RULE-03 | FOLLOW_UP_NOW | High fit, recent contact, and engagement |
-| AA007-RULE-04 | NURTURE | Stale contact and low engagement |
-| AA007-RULE-05 | FOLLOW_UP_SOON | Default when no higher-priority rule applies |
+```mermaid
+flowchart TD
+    A[Business Input] --> B[Lead Intake Agent]
+    B --> C[Run-scoped Workflow Context]
+    C --> D[Recency Agent]
+    D --> E[Engagement Agent]
+    E --> F[Fit and SLA Agent]
+    F --> G[Decision Agent]
+    G --> H[Deterministic Recommendation]
+    H --> I[LangGraph Conditional Routing]
+    I --> J[Controlled LLM Enhancement]
+    J --> K[Validation and Fallback]
+    K --> L[Explanation and Evidence]
+    L --> M[Audit Record]
+    M --> N[Business UI]
+```
 
-The recommendation is determined by business rules, not by the LLM.
+The deterministic decision remains authoritative. The LLM does not calculate priority or control routing.
 
-## 4. Technology Stack
+## Key Features
 
-- Python, FastAPI and LangGraph
-- Pydantic
-- Gemini and OpenAI provider integration
-- React, Vite, TypeScript and CSS
-- Pytest, Git, GitHub and Repomix
+- Five specialized agents with separate business responsibilities.
+- Structured input and output validation using Pydantic.
+- Deterministic lead scoring and recommendation rules.
+- LangGraph workflow orchestration and conditional routing.
+- Controlled LLM enhancement for sales-note summarization and approved intent-tag extraction.
+- Validated LLM output and deterministic fallback handling.
+- Recommendation explanations, evidence and audit references.
+- Business-facing interface with advanced technical details.
 
-## 5. Controlled LLM Enhancement
+## Deterministic Recommendations
 
-Gemini integration supports sales-note summarization and approved intent-tag extraction.
+| Recommendation | Business condition |
+|---|---|
+| REQUEST_DATA | Mandatory lead information is incomplete |
+| FOLLOW_UP_NOW | Committed follow-up is overdue or high-priority conditions apply |
+| FOLLOW_UP_SOON | No higher-priority rule applies |
+| NURTURE | Stale contact and low engagement |
 
-LLM output does not calculate priority, override deterministic recommendations, change business rules, or control workflow routing. Structured validation and deterministic fallback handling are retained.
+## Technical Evolution
 
-Keep provider credentials in the local backend environment file. Never commit API keys.
+1. **Deterministic MVP:** Specialized agents and transparent business rules.
+2. **LangGraph:** Existing agent responsibilities organized into graph-based orchestration.
+3. **Conditional routing:** Workflow paths selected using deterministic business conditions.
+4. **Controlled LLM:** An optional language enhancement with structured validation and fallback.
 
-## 6. Workflow and Audit
+The LLM does not replace the deterministic decision authority.
 
-Specialized agents evaluate:
-1. Lead intake
-2. Contact recency
-3. Engagement
-4. Fit and SLA
-5. Deterministic decision
-6. Finalization and audit recording
+## Demo Scenarios
 
-Each execution returns a recommendation, reasons, triggered rules, agent outputs, evidence, and an audit reference.
+See [Demo Scenarios](docs/phase32/DEMO_SCENARIOS.md).
 
-## 7. API Endpoints
+1. Incomplete lead information â€” REQUEST_DATA.
+2. High-fit, recently engaged lead â€” FOLLOW_UP_NOW.
+3. Stale lead with low engagement â€” NURTURE.
 
-| Method | Endpoint | Purpose |
-|---|---|---|
-| GET | `/` | API status |
-| GET | `/health` | Health check |
-| GET | `/leads` | Seeded demonstration leads |
-| POST | `/workflow/run` | Run lead prioritization |
-| GET | `/audit/{audit_reference}` | Retrieve audit record |
+A fourth verified outcome, FOLLOW_UP_SOON, is documented in the Phase 3.1 evidence.
 
-Interactive API documentation: `/docs`.
+## Technology Stack
 
-## 8. Running the Application
+| Layer | Technologies |
+|---|---|
+| Backend | Python, FastAPI |
+| Agent orchestration | LangGraph |
+| Data validation | Pydantic |
+| LLM integration | Gemini and OpenAI provider integration |
+| Frontend | React, Vite, TypeScript, CSS |
+| Testing | Pytest |
+| Development | Git, GitHub, Docker, Repomix |
 
-Backend:
-```bash
+## Run Locally
+
+### Backend
+
+```powershell
 cd backend
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-Frontend:
-```bash
+Backend API: http://127.0.0.1:8000
+
+API documentation: http://127.0.0.1:8000/docs
+
+### Frontend
+
+Open another terminal:
+
+```powershell
 cd frontend
 npm install
 npm run dev
 ```
 
-Configure environment variables using `backend/.env.example`. Keep actual credentials in `backend/.env`.
+Use the local frontend URL printed by Vite.
 
-## 9. Phase 3.1 Verification
+Configure optional provider credentials using `backend/.env.example`.
+Keep actual credentials in `backend/.env`. Never commit secrets.
 
-All four deterministic recommendation scenarios passed through the actual LangGraph workflow:
+## Cloud Deployment
 
-| Scenario | Result |
-|---|---|
-| Incomplete lead information | PASS — REQUEST_DATA |
-| High fit and recent engagement | PASS — FOLLOW_UP_NOW |
-| Stale contact and no engagement | PASS — NURTURE |
-| Valid lead with no higher-priority trigger | PASS — FOLLOW_UP_SOON |
+**Application URL:** https://aa007-lead-followup-intelligence.onrender.com
 
-**Backend scenario result: 4/4 passed.**
+Do not treat the repository URL as the deployed application.
+
+## Application Screenshots
+
+### 1. Dashboard Overview
+The main sales operations dashboard displaying available sample leads and system status.
+
+![Dashboard Overview](docs/screenshots/01-dashboard-overview.png)
+
+### 2. Lead Workspace
+Selected lead information, business details and recorded engagement.
+
+![Lead Workspace](docs/screenshots/02-lead-workspace.png)
+
+### 3. Prioritization Result
+Recommendation, business reasons and supporting evidence from the selected lead.
+
+![Priority Result](docs/screenshots/03-priority-result.png)
+
+### 4. Agent Contributions and Audit
+Five agent outputs, triggered decision rules and audit information.
+
+![Agent Audit](docs/screenshots/04-agent-audit.png)
+
+Historical technical evidence is retained under `docs/phase2-evidence/`.
+
+## Limitations and Non-Goals
+
+- Uses seeded demonstration leads rather than verified live CRM integrations.
+- Recommendations depend on configured business rules and available input data.
+- LLM enhancement is bounded and may use deterministic fallback.
+- The system does not autonomously contact customers.
+- It does not provide automatic pricing, contracting or sales approval.
+- It is an internship demonstration and is not claimed to be production-certified.
+
+## Future Improvements
+
+- Verified CRM integration.
+- Persistent audit storage.
+- Broader business-user evaluation.
+- Additional deployment and operational monitoring.
+
+## Validation Evidence
+
+Phase 3.1 recorded four successful deterministic recommendation scenarios.
 
 Evidence: `docs/phase3-evidence/four-outcome-verification.json`
 
-Backend regression tests:
-```bash
-pytest -v --tb=short
-```
+Historical LLM and workflow evidence: `docs/phase2-evidence/`.
 
-Frontend production build:
-```bash
-npm run build
-```
+## Repository
 
-## 10. Previous Phase Evidence
-
-Gemini integration and LLM validation evidence are retained in `docs/phase2-evidence/`.
-
-## 11. Product Boundary
-
-AA007 provides evidence-based decision support. Users remain responsible for reviewing recommendations and deciding whether and how to contact customers.
-
-**Repository:** https://github.com/dhanushacherian/AA007-Lead-Followup-Intelligence
+https://github.com/dhanushacherian/AA007-Lead-Followup-Intelligence

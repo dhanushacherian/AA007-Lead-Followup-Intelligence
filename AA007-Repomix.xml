@@ -1,10 +1,10 @@
-This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+This file is a merged representation of a subset of the codebase, containing files not matching ignore patterns, combined into a single document by Repomix.
 
 <file_summary>
 This section contains a summary of this file.
 
 <purpose>
-This file contains a packed representation of the entire repository's contents.
+This file contains a packed representation of a subset of the repository's contents that is considered the most important context.
 It is designed to be easily consumable by AI systems for analysis, code review,
 or other automated processes.
 </purpose>
@@ -32,6 +32,7 @@ The content is organized as follows:
 <notes>
 - Some files may have been excluded based on .gitignore rules and Repomix's configuration
 - Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching these patterns are excluded: AA007-Repomix.xml
 - Files matching patterns in .gitignore are excluded
 - Files matching default ignore patterns are excluded
 - Files are sorted by Git change count (files with more changes are at the bottom)
@@ -91,6 +92,11 @@ docs/
     PHASE23_EVALUATION.md
   phase3-evidence/
     four-outcome-verification.json
+  phase32/
+    ARCHITECTURE.md
+    DEMO_SCENARIOS.md
+    DEMO_SCRIPT.md
+    PRODUCT_OVERVIEW.md
   PHASE1.3_DOCKER_VALIDATION.md
 frontend/
   public/
@@ -127,315 +133,148 @@ README.md
 <files>
 This section contains the contents of the repository's files.
 
-<file path="backend/verify_four_outcomes.py">
-import json
-from datetime import date, timedelta
+<file path="docs/phase32/ARCHITECTURE.md">
+# Architecture Summary — AA007
 
-from app.main import workflow_service
-from app.models.schemas import (
-    ContactDetails,
-    EngagementEvent,
-    LeadRecord,
-    LeadStage,
-    PendingFollowUp,
-    WorkflowRequest,
-)
+## Business Workflow
 
-today = date.today()
+Business Input → Validation → Shared Workflow Context → Specialized Agents → Deterministic Decision → Conditional Workflow → Controlled LLM Enhancement → Validation/Fallback → Explanation → Audit → Business UI.
 
-scenarios = [
-    {
-        "name": "REQUEST_DATA",
-        "expected": "REQUEST_DATA",
-        "lead": LeadRecord(
-            lead_id="PHASE31-REQUEST-DATA",
-            contact=None,
-            source="Website",
-            age_days=2,
-            last_contact_date=today,
-            declared_fit="HIGH",
-            stage=LeadStage.NEW,
-        ),
-    },
-    {
-        "name": "FOLLOW_UP_NOW",
-        "expected": "FOLLOW_UP_NOW",
-        "lead": LeadRecord(
-            lead_id="PHASE31-FOLLOW-UP-NOW",
-            contact=ContactDetails(name="Demo High Fit"),
-            source="Website",
-            age_days=1,
-            last_contact_date=today,
-            engagement_events=[
-                EngagementEvent(
-                    event_type="INQUIRY",
-                    occurred_at=today,
-                    description="Recent product inquiry",
-                )
-            ],
-            declared_fit="HIGH",
-            stage=LeadStage.NEW,
-            pending_follow_up=PendingFollowUp(committed=False),
-        ),
-    },
-    {
-        "name": "NURTURE",
-        "expected": "NURTURE",
-        "lead": LeadRecord(
-            lead_id="PHASE31-NURTURE",
-            contact=ContactDetails(name="Demo Stale Lead"),
-            source="Event",
-            age_days=30,
-            last_contact_date=today - timedelta(days=20),
-            engagement_events=[],
-            declared_fit="LOW",
-            stage=LeadStage.NEW,
-            pending_follow_up=PendingFollowUp(committed=False),
-        ),
-    },
-    {
-        "name": "FOLLOW_UP_SOON",
-        "expected": "FOLLOW_UP_SOON",
-        "lead": LeadRecord(
-            lead_id="PHASE31-FOLLOW-UP-SOON",
-            contact=ContactDetails(name="Demo Moderate Lead"),
-            source="Referral",
-            age_days=8,
-            last_contact_date=today - timedelta(days=7),
-            engagement_events=[
-                EngagementEvent(
-                    event_type="EMAIL_REPLY",
-                    occurred_at=today - timedelta(days=7),
-                    description="One recorded email reply",
-                )
-            ],
-            declared_fit="MEDIUM",
-            stage=LeadStage.CONTACTED,
-            pending_follow_up=PendingFollowUp(committed=False),
-        ),
-    },
-]
+## Five Agents
 
-results = []
-failures = 0
+1. Lead Intake Agent — validates and normalizes lead information.
+2. Recency Agent — evaluates contact recency.
+3. Engagement Agent — evaluates approved engagement events.
+4. Fit & SLA Agent — evaluates declared fit and follow-up commitments.
+5. Lead Priority Decision Agent — combines agent results and applies deterministic recommendation rules.
 
-for scenario in scenarios:
-    response = workflow_service.run(
-        WorkflowRequest(lead=scenario["lead"])
-    )
+## Orchestration
 
-    actual = response.recommendation
-    passed = actual == scenario["expected"]
+LangGraph organizes the agent workflow. Conditional routing uses business conditions rather than LLM-generated authority.
 
-    if not passed:
-        failures += 1
+## Controlled LLM
 
-    item = {
-        "scenario": scenario["name"],
-        "expected": scenario["expected"],
-        "actual": actual,
-        "passed": passed,
-        "lead_id": response.lead_id,
-        "triggered_rules": response.triggered_rules,
-        "reasons": response.reasons,
-        "evidence": response.evidence,
-        "audit_reference": response.audit_reference,
-        "llm_metadata": response.llm_metadata,
-    }
-    results.append(item)
+The approved LLM role is sales-note summarization and intent-tag extraction. Output is validated. Provider failure or invalid output must not change the deterministic recommendation.
 
-    print(
-        f"{'PASS' if passed else 'FAIL'} | "
-        f"{scenario['name']} | "
-        f"expected={scenario['expected']} | actual={actual}"
-    )
-    print(f"  Rules: {response.triggered_rules}")
-    print(f"  Audit: {response.audit_reference}")
+## Explanation and Audit
 
-output = {
-    "phase": "3.1",
-    "test": "four_deterministic_recommendation_outcomes",
-    "total": len(results),
-    "passed": len(results) - failures,
-    "failed": failures,
-    "results": results,
-}
+The workflow exposes recommendation reasons, evidence, agent results and an audit reference.
 
-with open(
-    "../docs/phase3-evidence/four-outcome-verification.json",
-    "w",
-    encoding="utf-8",
-) as file:
-    json.dump(output, file, indent=2, ensure_ascii=False)
+## Authority Boundary
 
-print(f"\nRESULT: {len(results) - failures}/{len(results)} passed")
-
-if failures:
-    raise SystemExit(1)
-
-print("Evidence saved: docs/phase3-evidence/four-outcome-verification.json")
+The deterministic decision is authoritative. The LLM cannot calculate priority, override the recommendation or control workflow routing.
 </file>
 
-<file path="docs/phase3-evidence/four-outcome-verification.json">
-{
-  "phase": "3.1",
-  "test": "four_deterministic_recommendation_outcomes",
-  "total": 4,
-  "passed": 4,
-  "failed": 0,
-  "results": [
-    {
-      "scenario": "REQUEST_DATA",
-      "expected": "REQUEST_DATA",
-      "actual": "REQUEST_DATA",
-      "passed": true,
-      "lead_id": "PHASE31-REQUEST-DATA",
-      "triggered_rules": [
-        "AA007-RULE-01"
-      ],
-      "reasons": [
-        "Contact details are missing."
-      ],
-      "evidence": [
-        "Contact details are missing.",
-        "Lead age: 2 days.",
-        "Days since last contact: 0.",
-        "Recorded engagement events: 0.",
-        "Declared fit: HIGH.",
-        "Follow-up committed: False.",
-        "No follow-up due date is available.",
-        "Recommendation: REQUEST_DATA",
-        "Contact details are missing.",
-        "Rules triggered: AA007-RULE-01"
-      ],
-      "audit_reference": "AUDIT-AA007-04C80C9BD8CE",
-      "llm_metadata": {
-        "llm_used": "False",
-        "provider": "gemini",
-        "model": "gemini-3.5-flash-lite",
-        "status": "fallback",
-        "fallback_used": "True",
-        "validation_status": "not_applicable"
-      }
-    },
-    {
-      "scenario": "FOLLOW_UP_NOW",
-      "expected": "FOLLOW_UP_NOW",
-      "actual": "FOLLOW_UP_NOW",
-      "passed": true,
-      "lead_id": "PHASE31-FOLLOW-UP-NOW",
-      "triggered_rules": [
-        "AA007-RULE-03"
-      ],
-      "reasons": [
-        "Declared fit is HIGH.",
-        "Lead contact is recent.",
-        "Engagement activity is recorded."
-      ],
-      "evidence": [
-        "Lead ID: PHASE31-FOLLOW-UP-NOW",
-        "Lead stage: NEW",
-        "Lead source: Website",
-        "Lead age: 1 days.",
-        "Days since last contact: 0.",
-        "Recorded engagement events: 1.",
-        "Engagement event: INQUIRY",
-        "Declared fit: HIGH.",
-        "Follow-up committed: False.",
-        "No follow-up due date is available.",
-        "Recommendation: FOLLOW_UP_NOW",
-        "Declared fit is HIGH.",
-        "Lead contact is recent.",
-        "Engagement activity is recorded.",
-        "Rules triggered: AA007-RULE-03"
-      ],
-      "audit_reference": "AUDIT-AA007-5E9ADA6A85F4",
-      "llm_metadata": {
-        "llm_used": "False",
-        "provider": "gemini",
-        "model": "gemini-3.5-flash-lite",
-        "status": "fallback",
-        "fallback_used": "True",
-        "validation_status": "not_applicable"
-      }
-    },
-    {
-      "scenario": "NURTURE",
-      "expected": "NURTURE",
-      "actual": "NURTURE",
-      "passed": true,
-      "lead_id": "PHASE31-NURTURE",
-      "triggered_rules": [
-        "AA007-RULE-04"
-      ],
-      "reasons": [
-        "Lead contact is stale.",
-        "No engagement events are recorded."
-      ],
-      "evidence": [
-        "Lead ID: PHASE31-NURTURE",
-        "Lead stage: NEW",
-        "Lead source: Event",
-        "Lead age: 30 days.",
-        "Days since last contact: 20.",
-        "Recorded engagement events: 0.",
-        "Declared fit: LOW.",
-        "Follow-up committed: False.",
-        "No follow-up due date is available.",
-        "Recommendation: NURTURE",
-        "Lead contact is stale.",
-        "No engagement events are recorded.",
-        "Rules triggered: AA007-RULE-04"
-      ],
-      "audit_reference": "AUDIT-AA007-1AFB663AB970",
-      "llm_metadata": {
-        "llm_used": "False",
-        "provider": "gemini",
-        "model": "gemini-3.5-flash-lite",
-        "status": "fallback",
-        "fallback_used": "True",
-        "validation_status": "not_applicable"
-      }
-    },
-    {
-      "scenario": "FOLLOW_UP_SOON",
-      "expected": "FOLLOW_UP_SOON",
-      "actual": "FOLLOW_UP_SOON",
-      "passed": true,
-      "lead_id": "PHASE31-FOLLOW-UP-SOON",
-      "triggered_rules": [
-        "AA007-RULE-05"
-      ],
-      "reasons": [
-        "No immediate-follow-up or nurture rule was triggered."
-      ],
-      "evidence": [
-        "Lead ID: PHASE31-FOLLOW-UP-SOON",
-        "Lead stage: CONTACTED",
-        "Lead source: Referral",
-        "Lead age: 8 days.",
-        "Days since last contact: 7.",
-        "Recorded engagement events: 1.",
-        "Engagement event: EMAIL_REPLY",
-        "Declared fit: MEDIUM.",
-        "Follow-up committed: False.",
-        "No follow-up due date is available.",
-        "Recommendation: FOLLOW_UP_SOON",
-        "No immediate-follow-up or nurture rule was triggered.",
-        "Rules triggered: AA007-RULE-05"
-      ],
-      "audit_reference": "AUDIT-AA007-A48358231169",
-      "llm_metadata": {
-        "llm_used": "False",
-        "provider": "gemini",
-        "model": "gemini-3.5-flash-lite",
-        "status": "fallback",
-        "fallback_used": "True",
-        "validation_status": "not_applicable"
-      }
-    }
-  ]
-}
+<file path="docs/phase32/DEMO_SCENARIOS.md">
+# Reproducible Demo Scenarios — AA007
+
+Use the existing seeded demonstration leads or the equivalent verified test inputs. Do not invent lead identifiers.
+
+## Scenario 1 — Incomplete Lead Information
+
+Business condition:
+A lead is missing mandatory information.
+
+Expected recommendation:
+REQUEST_DATA.
+
+Demonstrate:
+- Lead input
+- Validation result
+- Recommendation
+- Missing-data explanation
+- Evidence and audit reference
+
+## Scenario 2 — High-Priority Lead
+
+Business condition:
+A lead has high declared fit, recent contact and engagement, or an overdue committed follow-up.
+
+Expected recommendation:
+FOLLOW_UP_NOW.
+
+Demonstrate:
+- Lead details
+- Recency and engagement evidence
+- Deterministic recommendation
+- Explanation and agent trace
+
+## Scenario 3 — Stale Lead
+
+Business condition:
+A lead has stale contact and low engagement.
+
+Expected recommendation:
+NURTURE.
+
+Demonstrate:
+- Lead details
+- Engagement and recency evidence
+- Conditional workflow result
+- Recommendation explanation
+
+## Additional Verified Outcome
+
+FOLLOW_UP_SOON is the default when no higher-priority rule applies. The four-outcome verification is retained in `docs/phase3-evidence/four-outcome-verification.json`.
+
+## LLM Demonstration
+
+Where provider configuration permits, demonstrate a successful controlled LLM enhancement and a fallback case. Verify that neither changes the deterministic recommendation.
+</file>
+
+<file path="docs/phase32/DEMO_SCRIPT.md">
+# AA007 — 2 to 3 Minute Demo Script
+
+## 1. Business Problem (20 seconds)
+Sales teams need to prioritize lead follow-up consistently using business evidence instead of manual guesswork.
+
+## 2. Product Input (20 seconds)
+Show the lead information and explain the relevant contact, engagement, fit and follow-up fields.
+
+## 3. Agent Workflow (30 seconds)
+Explain the five specialized agents and how LangGraph coordinates their execution.
+
+## 4. Recommendation (30 seconds)
+Show the deterministic recommendation and explain the business conditions that triggered it.
+
+## 5. Explainability and Audit (25 seconds)
+Open the advanced details and show agent outputs, evidence, reasons and audit reference.
+
+## 6. Conditional Scenario (20 seconds)
+Demonstrate a different business condition and its corresponding recommendation.
+
+## 7. Controlled LLM (20 seconds)
+Show the approved language-enhancement role and, where available, the deterministic fallback. Explain that the LLM cannot change the recommendation.
+
+## 8. Business Value (15 seconds)
+AA007 helps sales teams make more consistent, explainable and reviewable follow-up decisions while keeping customer contact under human control.
+</file>
+
+<file path="docs/phase32/PRODUCT_OVERVIEW.md">
+# Product Overview — AA007
+
+## Product
+Lead Follow-up Prioritization Intelligence
+
+## Business Problem
+Sales teams need a consistent and explainable way to decide which leads require attention.
+
+## Solution
+AA007 evaluates lead recency, engagement, declared fit and follow-up commitments through five specialized agents and deterministic business rules.
+
+## Primary Users
+- Sales coordinators
+- Inside sales representatives
+- Sales operations leads
+
+## Business Value
+- More consistent follow-up prioritization
+- Transparent reasons behind recommendations
+- Evidence-based next-action guidance
+- Reviewable workflow and audit information
+
+## Decision Authority
+Deterministic business rules determine the recommendation. Controlled LLM enhancement supports approved language tasks only. People retain responsibility for customer contact.
 </file>
 
 <file path="backend/app/agents/__init__.py">
@@ -1053,6 +892,155 @@ for name, passed in checks.items():
     print(("PASS" if passed else "FAIL") + ": " + name)
 
 print("\nRESULT:", "ALL CHECKS PASSED" if all(checks.values()) else "CHECKS NEED REVIEW")
+</file>
+
+<file path="backend/verify_four_outcomes.py">
+import json
+from datetime import date, timedelta
+
+from app.main import workflow_service
+from app.models.schemas import (
+    ContactDetails,
+    EngagementEvent,
+    LeadRecord,
+    LeadStage,
+    PendingFollowUp,
+    WorkflowRequest,
+)
+
+today = date.today()
+
+scenarios = [
+    {
+        "name": "REQUEST_DATA",
+        "expected": "REQUEST_DATA",
+        "lead": LeadRecord(
+            lead_id="PHASE31-REQUEST-DATA",
+            contact=None,
+            source="Website",
+            age_days=2,
+            last_contact_date=today,
+            declared_fit="HIGH",
+            stage=LeadStage.NEW,
+        ),
+    },
+    {
+        "name": "FOLLOW_UP_NOW",
+        "expected": "FOLLOW_UP_NOW",
+        "lead": LeadRecord(
+            lead_id="PHASE31-FOLLOW-UP-NOW",
+            contact=ContactDetails(name="Demo High Fit"),
+            source="Website",
+            age_days=1,
+            last_contact_date=today,
+            engagement_events=[
+                EngagementEvent(
+                    event_type="INQUIRY",
+                    occurred_at=today,
+                    description="Recent product inquiry",
+                )
+            ],
+            declared_fit="HIGH",
+            stage=LeadStage.NEW,
+            pending_follow_up=PendingFollowUp(committed=False),
+        ),
+    },
+    {
+        "name": "NURTURE",
+        "expected": "NURTURE",
+        "lead": LeadRecord(
+            lead_id="PHASE31-NURTURE",
+            contact=ContactDetails(name="Demo Stale Lead"),
+            source="Event",
+            age_days=30,
+            last_contact_date=today - timedelta(days=20),
+            engagement_events=[],
+            declared_fit="LOW",
+            stage=LeadStage.NEW,
+            pending_follow_up=PendingFollowUp(committed=False),
+        ),
+    },
+    {
+        "name": "FOLLOW_UP_SOON",
+        "expected": "FOLLOW_UP_SOON",
+        "lead": LeadRecord(
+            lead_id="PHASE31-FOLLOW-UP-SOON",
+            contact=ContactDetails(name="Demo Moderate Lead"),
+            source="Referral",
+            age_days=8,
+            last_contact_date=today - timedelta(days=7),
+            engagement_events=[
+                EngagementEvent(
+                    event_type="EMAIL_REPLY",
+                    occurred_at=today - timedelta(days=7),
+                    description="One recorded email reply",
+                )
+            ],
+            declared_fit="MEDIUM",
+            stage=LeadStage.CONTACTED,
+            pending_follow_up=PendingFollowUp(committed=False),
+        ),
+    },
+]
+
+results = []
+failures = 0
+
+for scenario in scenarios:
+    response = workflow_service.run(
+        WorkflowRequest(lead=scenario["lead"])
+    )
+
+    actual = response.recommendation
+    passed = actual == scenario["expected"]
+
+    if not passed:
+        failures += 1
+
+    item = {
+        "scenario": scenario["name"],
+        "expected": scenario["expected"],
+        "actual": actual,
+        "passed": passed,
+        "lead_id": response.lead_id,
+        "triggered_rules": response.triggered_rules,
+        "reasons": response.reasons,
+        "evidence": response.evidence,
+        "audit_reference": response.audit_reference,
+        "llm_metadata": response.llm_metadata,
+    }
+    results.append(item)
+
+    print(
+        f"{'PASS' if passed else 'FAIL'} | "
+        f"{scenario['name']} | "
+        f"expected={scenario['expected']} | actual={actual}"
+    )
+    print(f"  Rules: {response.triggered_rules}")
+    print(f"  Audit: {response.audit_reference}")
+
+output = {
+    "phase": "3.1",
+    "test": "four_deterministic_recommendation_outcomes",
+    "total": len(results),
+    "passed": len(results) - failures,
+    "failed": failures,
+    "results": results,
+}
+
+with open(
+    "../docs/phase3-evidence/four-outcome-verification.json",
+    "w",
+    encoding="utf-8",
+) as file:
+    json.dump(output, file, indent=2, ensure_ascii=False)
+
+print(f"\nRESULT: {len(results) - failures}/{len(results)} passed")
+
+if failures:
+    raise SystemExit(1)
+
+print("Evidence saved: docs/phase3-evidence/four-outcome-verification.json")
 </file>
 
 <file path="docs/course-guides/02_Controlled_LLM_and_Evaluation_Guide.md">
@@ -1684,6 +1672,168 @@ LLM failure does not replace the deterministic fallback.
 
 Live provider integration still requires valid credentials,
 a configured model, and an actual provider execution test.
+</file>
+
+<file path="docs/phase3-evidence/four-outcome-verification.json">
+{
+  "phase": "3.1",
+  "test": "four_deterministic_recommendation_outcomes",
+  "total": 4,
+  "passed": 4,
+  "failed": 0,
+  "results": [
+    {
+      "scenario": "REQUEST_DATA",
+      "expected": "REQUEST_DATA",
+      "actual": "REQUEST_DATA",
+      "passed": true,
+      "lead_id": "PHASE31-REQUEST-DATA",
+      "triggered_rules": [
+        "AA007-RULE-01"
+      ],
+      "reasons": [
+        "Contact details are missing."
+      ],
+      "evidence": [
+        "Contact details are missing.",
+        "Lead age: 2 days.",
+        "Days since last contact: 0.",
+        "Recorded engagement events: 0.",
+        "Declared fit: HIGH.",
+        "Follow-up committed: False.",
+        "No follow-up due date is available.",
+        "Recommendation: REQUEST_DATA",
+        "Contact details are missing.",
+        "Rules triggered: AA007-RULE-01"
+      ],
+      "audit_reference": "AUDIT-AA007-04C80C9BD8CE",
+      "llm_metadata": {
+        "llm_used": "False",
+        "provider": "gemini",
+        "model": "gemini-3.5-flash-lite",
+        "status": "fallback",
+        "fallback_used": "True",
+        "validation_status": "not_applicable"
+      }
+    },
+    {
+      "scenario": "FOLLOW_UP_NOW",
+      "expected": "FOLLOW_UP_NOW",
+      "actual": "FOLLOW_UP_NOW",
+      "passed": true,
+      "lead_id": "PHASE31-FOLLOW-UP-NOW",
+      "triggered_rules": [
+        "AA007-RULE-03"
+      ],
+      "reasons": [
+        "Declared fit is HIGH.",
+        "Lead contact is recent.",
+        "Engagement activity is recorded."
+      ],
+      "evidence": [
+        "Lead ID: PHASE31-FOLLOW-UP-NOW",
+        "Lead stage: NEW",
+        "Lead source: Website",
+        "Lead age: 1 days.",
+        "Days since last contact: 0.",
+        "Recorded engagement events: 1.",
+        "Engagement event: INQUIRY",
+        "Declared fit: HIGH.",
+        "Follow-up committed: False.",
+        "No follow-up due date is available.",
+        "Recommendation: FOLLOW_UP_NOW",
+        "Declared fit is HIGH.",
+        "Lead contact is recent.",
+        "Engagement activity is recorded.",
+        "Rules triggered: AA007-RULE-03"
+      ],
+      "audit_reference": "AUDIT-AA007-5E9ADA6A85F4",
+      "llm_metadata": {
+        "llm_used": "False",
+        "provider": "gemini",
+        "model": "gemini-3.5-flash-lite",
+        "status": "fallback",
+        "fallback_used": "True",
+        "validation_status": "not_applicable"
+      }
+    },
+    {
+      "scenario": "NURTURE",
+      "expected": "NURTURE",
+      "actual": "NURTURE",
+      "passed": true,
+      "lead_id": "PHASE31-NURTURE",
+      "triggered_rules": [
+        "AA007-RULE-04"
+      ],
+      "reasons": [
+        "Lead contact is stale.",
+        "No engagement events are recorded."
+      ],
+      "evidence": [
+        "Lead ID: PHASE31-NURTURE",
+        "Lead stage: NEW",
+        "Lead source: Event",
+        "Lead age: 30 days.",
+        "Days since last contact: 20.",
+        "Recorded engagement events: 0.",
+        "Declared fit: LOW.",
+        "Follow-up committed: False.",
+        "No follow-up due date is available.",
+        "Recommendation: NURTURE",
+        "Lead contact is stale.",
+        "No engagement events are recorded.",
+        "Rules triggered: AA007-RULE-04"
+      ],
+      "audit_reference": "AUDIT-AA007-1AFB663AB970",
+      "llm_metadata": {
+        "llm_used": "False",
+        "provider": "gemini",
+        "model": "gemini-3.5-flash-lite",
+        "status": "fallback",
+        "fallback_used": "True",
+        "validation_status": "not_applicable"
+      }
+    },
+    {
+      "scenario": "FOLLOW_UP_SOON",
+      "expected": "FOLLOW_UP_SOON",
+      "actual": "FOLLOW_UP_SOON",
+      "passed": true,
+      "lead_id": "PHASE31-FOLLOW-UP-SOON",
+      "triggered_rules": [
+        "AA007-RULE-05"
+      ],
+      "reasons": [
+        "No immediate-follow-up or nurture rule was triggered."
+      ],
+      "evidence": [
+        "Lead ID: PHASE31-FOLLOW-UP-SOON",
+        "Lead stage: CONTACTED",
+        "Lead source: Referral",
+        "Lead age: 8 days.",
+        "Days since last contact: 7.",
+        "Recorded engagement events: 1.",
+        "Engagement event: EMAIL_REPLY",
+        "Declared fit: MEDIUM.",
+        "Follow-up committed: False.",
+        "No follow-up due date is available.",
+        "Recommendation: FOLLOW_UP_SOON",
+        "No immediate-follow-up or nurture rule was triggered.",
+        "Rules triggered: AA007-RULE-05"
+      ],
+      "audit_reference": "AUDIT-AA007-A48358231169",
+      "llm_metadata": {
+        "llm_used": "False",
+        "provider": "gemini",
+        "model": "gemini-3.5-flash-lite",
+        "status": "fallback",
+        "fallback_used": "True",
+        "validation_status": "not_applicable"
+      }
+    }
+  ]
+}
 </file>
 
 <file path="docs/PHASE1.3_DOCKER_VALIDATION.md">
@@ -4517,128 +4667,174 @@ def test_all_conditional_routes_are_recorded_in_audit():
 <file path="README.md">
 # AA007 — Lead Follow-up Prioritization Intelligence
 
-**RealRails Agentic AI Internship | Agentic AI MVP | Phase 3.1**
+**RealRails Agentic AI Internship — Batch 2 | Phase 3.2**
 
-## 1. Project Overview
+A business-focused, five-agent lead follow-up decision-support application using deterministic business rules, LangGraph orchestration and controlled LLM enhancement.
 
-AA007 is a deterministic, multi-agent lead follow-up prioritization application. It evaluates lead information, contact recency, engagement, declared fit, and follow-up commitments to recommend an appropriate business action.
+## Business Problem
 
-## 2. Phase 3.1 Business Experience
+Sales teams need a consistent way to prioritize lead follow-up using contact recency, engagement, declared fit and pending follow-up commitments instead of manual guesswork.
 
-The business-facing interface presents:
-- Recommended action
-- Reasons behind the recommendation
+## Product Solution
+
+AA007 evaluates structured lead information and provides:
+- A recommended business action
+- Reasons supporting the recommendation
 - Evidence from the lead record
-- Recommended next action
+- Agent outputs and decision details
+- An audit reference for workflow review
 
-Technical agent contributions, decision details, and audit information are available under the collapsed **Advanced details** section.
+Primary users: sales coordinators, inside sales representatives and sales operations leads.
 
-Customer contact remains a human decision and action.
+Customer contact remains a human decision.
 
-## 3. Deterministic Recommendations
+## Architecture
 
-| Rule | Recommendation | Condition |
-|---|---|---|
-| AA007-RULE-01 | REQUEST_DATA | Mandatory lead information is incomplete |
-| AA007-RULE-02 | FOLLOW_UP_NOW | A committed follow-up is overdue |
-| AA007-RULE-03 | FOLLOW_UP_NOW | High fit, recent contact, and engagement |
-| AA007-RULE-04 | NURTURE | Stale contact and low engagement |
-| AA007-RULE-05 | FOLLOW_UP_SOON | Default when no higher-priority rule applies |
+```mermaid
+flowchart TD
+    A[Business Input] --> B[Lead Intake Agent]
+    B --> C[Run-scoped Workflow Context]
+    C --> D[Recency Agent]
+    D --> E[Engagement Agent]
+    E --> F[Fit and SLA Agent]
+    F --> G[Decision Agent]
+    G --> H[Deterministic Recommendation]
+    H --> I[LangGraph Conditional Routing]
+    I --> J[Controlled LLM Enhancement]
+    J --> K[Validation and Fallback]
+    K --> L[Explanation and Evidence]
+    L --> M[Audit Record]
+    M --> N[Business UI]
+```
 
-The recommendation is determined by business rules, not by the LLM.
+The deterministic decision remains authoritative. The LLM does not calculate priority or control routing.
 
-## 4. Technology Stack
+## Key Features
 
-- Python, FastAPI and LangGraph
-- Pydantic
-- Gemini and OpenAI provider integration
-- React, Vite, TypeScript and CSS
-- Pytest, Git, GitHub and Repomix
+- Five specialized agents with separate business responsibilities.
+- Structured input and output validation using Pydantic.
+- Deterministic lead scoring and recommendation rules.
+- LangGraph workflow orchestration and conditional routing.
+- Controlled LLM enhancement for sales-note summarization and approved intent-tag extraction.
+- Validated LLM output and deterministic fallback handling.
+- Recommendation explanations, evidence and audit references.
+- Business-facing interface with advanced technical details.
 
-## 5. Controlled LLM Enhancement
+## Deterministic Recommendations
 
-Gemini integration supports sales-note summarization and approved intent-tag extraction.
+| Recommendation | Business condition |
+|---|---|
+| REQUEST_DATA | Mandatory lead information is incomplete |
+| FOLLOW_UP_NOW | Committed follow-up is overdue or high-priority conditions apply |
+| FOLLOW_UP_SOON | No higher-priority rule applies |
+| NURTURE | Stale contact and low engagement |
 
-LLM output does not calculate priority, override deterministic recommendations, change business rules, or control workflow routing. Structured validation and deterministic fallback handling are retained.
+## Technical Evolution
 
-Keep provider credentials in the local backend environment file. Never commit API keys.
+1. **Deterministic MVP:** Specialized agents and transparent business rules.
+2. **LangGraph:** Existing agent responsibilities organized into graph-based orchestration.
+3. **Conditional routing:** Workflow paths selected using deterministic business conditions.
+4. **Controlled LLM:** An optional language enhancement with structured validation and fallback.
 
-## 6. Workflow and Audit
+The LLM does not replace the deterministic decision authority.
 
-Specialized agents evaluate:
-1. Lead intake
-2. Contact recency
-3. Engagement
-4. Fit and SLA
-5. Deterministic decision
-6. Finalization and audit recording
+## Demo Scenarios
 
-Each execution returns a recommendation, reasons, triggered rules, agent outputs, evidence, and an audit reference.
+See [Demo Scenarios](docs/phase32/DEMO_SCENARIOS.md).
 
-## 7. API Endpoints
+1. Incomplete lead information — REQUEST_DATA.
+2. High-fit, recently engaged lead — FOLLOW_UP_NOW.
+3. Stale lead with low engagement — NURTURE.
 
-| Method | Endpoint | Purpose |
-|---|---|---|
-| GET | `/` | API status |
-| GET | `/health` | Health check |
-| GET | `/leads` | Seeded demonstration leads |
-| POST | `/workflow/run` | Run lead prioritization |
-| GET | `/audit/{audit_reference}` | Retrieve audit record |
+A fourth verified outcome, FOLLOW_UP_SOON, is documented in the Phase 3.1 evidence.
 
-Interactive API documentation: `/docs`.
+## Technology Stack
 
-## 8. Running the Application
+| Layer | Technologies |
+|---|---|
+| Backend | Python, FastAPI |
+| Agent orchestration | LangGraph |
+| Data validation | Pydantic |
+| LLM integration | Gemini and OpenAI provider integration |
+| Frontend | React, Vite, TypeScript, CSS |
+| Testing | Pytest |
+| Development | Git, GitHub, Docker, Repomix |
 
-Backend:
-```bash
+## Run Locally
+
+### Backend
+
+```powershell
 cd backend
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-Frontend:
-```bash
+Backend API: http://127.0.0.1:8000
+
+API documentation: http://127.0.0.1:8000/docs
+
+### Frontend
+
+Open another terminal:
+
+```powershell
 cd frontend
 npm install
 npm run dev
 ```
 
-Configure environment variables using `backend/.env.example`. Keep actual credentials in `backend/.env`.
+Use the local frontend URL printed by Vite.
 
-## 9. Phase 3.1 Verification
+Configure optional provider credentials using `backend/.env.example`.
+Keep actual credentials in `backend/.env`. Never commit secrets.
 
-All four deterministic recommendation scenarios passed through the actual LangGraph workflow:
+## Cloud Deployment
 
-| Scenario | Result |
-|---|---|
-| Incomplete lead information | PASS — REQUEST_DATA |
-| High fit and recent engagement | PASS — FOLLOW_UP_NOW |
-| Stale contact and no engagement | PASS — NURTURE |
-| Valid lead with no higher-priority trigger | PASS — FOLLOW_UP_SOON |
+**Application URL:** Pending live deployment verification.
 
-**Backend scenario result: 4/4 passed.**
+Do not treat the repository URL as the deployed application.
+
+## Screenshots
+
+Add current application screenshots to `docs/screenshots/`.
+
+Suggested captures:
+1. Main business-facing dashboard.
+2. Lead recommendation and score/reasons.
+3. Advanced agent and decision details.
+4. Conditional workflow or LLM result.
+5. Audit information.
+
+Historical technical evidence is retained under `docs/phase2-evidence/`.
+
+## Limitations and Non-Goals
+
+- Uses seeded demonstration leads rather than verified live CRM integrations.
+- Recommendations depend on configured business rules and available input data.
+- LLM enhancement is bounded and may use deterministic fallback.
+- The system does not autonomously contact customers.
+- It does not provide automatic pricing, contracting or sales approval.
+- It is an internship demonstration and is not claimed to be production-certified.
+
+## Future Improvements
+
+- Verified CRM integration.
+- Persistent audit storage.
+- Broader business-user evaluation.
+- Additional deployment and operational monitoring.
+
+## Validation Evidence
+
+Phase 3.1 recorded four successful deterministic recommendation scenarios.
 
 Evidence: `docs/phase3-evidence/four-outcome-verification.json`
 
-Backend regression tests:
-```bash
-pytest -v --tb=short
-```
+Historical LLM and workflow evidence: `docs/phase2-evidence/`.
 
-Frontend production build:
-```bash
-npm run build
-```
+## Repository
 
-## 10. Previous Phase Evidence
-
-Gemini integration and LLM validation evidence are retained in `docs/phase2-evidence/`.
-
-## 11. Product Boundary
-
-AA007 provides evidence-based decision support. Users remain responsible for reviewing recommendations and deciding whether and how to contact customers.
-
-**Repository:** https://github.com/dhanushacherian/AA007-Lead-Followup-Intelligence
+https://github.com/dhanushacherian/AA007-Lead-Followup-Intelligence
 </file>
 
 </files>
